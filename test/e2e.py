@@ -58,6 +58,9 @@ with sync_playwright() as p:
             if tab == 'trade':
                 pg.evaluate('window.scrollTo(0,0)'); pg.screenshot(path=f'{OUT}/{label}-finder.png', full_page=(label == 'desktop'))
                 print('finder:', pg.inner_text('#view')[:900])
+                pg.click('[data-tsub="edges"]'); pg.wait_for_timeout(300); pg.screenshot(path=f'{OUT}/{label}-edges.png', full_page=(label == 'desktop'))
+                print('edges:', pg.inner_text('#view')[:600])
+                pg.click('[data-tsub="find"]'); pg.wait_for_timeout(300)
                 pg.click('[data-loadtrade="0"]'); pg.wait_for_timeout(400)
                 pg.screenshot(path=f'{OUT}/{label}-loaded.png')
                 pg.click('[data-tsub="calc"]'); pg.wait_for_timeout(200)

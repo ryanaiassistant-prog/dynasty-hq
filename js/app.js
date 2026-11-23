@@ -162,6 +162,12 @@ function delta(pid) {
   const d = V(pid) - prev; if (Math.abs(d) < 25) return '';
   return `<span class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${fmt(Math.abs(d))}</span>`;
 }
+const MKT = pid => S.values[pid]?.market;
+const MOD = pid => S.values[pid]?.model;
+const EDGE = pid => { const m = MKT(pid), d = MOD(pid), g = S.values[pid]?.games || 0; return m && m >= 300 && g >= 6 ? d / m - 1 : null; };
+const edgeHtml = pid => { const e = EDGE(pid); if (e == null) return '<span class="dim">–</span>'; const pct = Math.round(e * 100);
+  return `<span class="${pct >= 15 ? 'up' : pct <= -15 ? 'dn' : 'dim'}">${pct > 0 ? '+' : ''}${pct}%</span>`; };
+const mm = pid => `<span class="dim" style="font-size:10px">mkt ${MKT(pid) ? fmt(MKT(pid)) : '–'} · model ${fmt(MOD(pid))}</span> <span style="font-size:10px">${EDGE(pid) == null ? '' : edgeHtml(pid)}</span>`;
 const age = pid => { const a = P(pid).age; return a ? a : '–'; };
 function proj(pid) {
   const p = P(pid); if (!S.ctx) return { pts: 0, flags: [] };
@@ -207,16 +213,16 @@ function renderTeams() {
       <td><div class="bar"><i style="width:${(s.total / max) * 100}%"></i></div></td></tr>`;
     if (open === s.rid) h += `<tr class="sub"><td colspan="9">${rosterDetail(s.rid)}</td></tr>`;
   });
-  h += '</tbody></table></div><p class="note">STARTERS = value of each team\'s best QB×2, RB×3, WR×4, TE, K, DL×3, LB×3, DB×3. ▲▼ = value change since yesterday.</p>';
+  h += '</tbody></table></div><p class="note">VALUE = 65% MKT (DynastyProcess superflex market) + 35% MODEL (built on your league\'s scoring, age curve and positional scarcity). IDP and K have no market, so VALUE = MODEL. EDGE = how much more (green) or less (red) your scoring values a player than the market (needs 6+ games of production). STARTERS = value of each team\'s best QB×2, RB×3, WR×4, TE, K, DL×3, LB×3, DB×3. ▲▼ = value change since yesterday.</p>';
   view.innerHTML = h;
 }
 function rosterDetail(rid) {
   const r = S.teams[rid].roster;
   const pids = (r.players || []).slice().sort((a, b) => E.GROUPS.indexOf(pos(a)) - E.GROUPS.indexOf(pos(b)) || V(b) - V(a));
-  let h = '<div class="tw"><table><thead><tr><th>POS</th><th>PLAYER</th><th>NFL</th><th class="num">AGE</th><th class="num">PPG</th><th class="num">VALUE</th><th class="num">Δ</th></tr></thead><tbody>';
+  let h = '<div class="tw"><table><thead><tr><th>POS</th><th>PLAYER</th><th>NFL</th><th class="num">AGE</th><th class="num">PPG</th><th class="num">VALUE</th><th class="num">MKT</th><th class="num">MODEL</th><th class="num">EDGE</th><th class="num">Δ</th></tr></thead><tbody>';
   for (const pid of pids) {
     const p = P(pid);
-    h += `<tr><td>${posTag(pos(pid))}</td><td class="hi">${esc(p.n)}${tags(pid, r)}</td><td class="dim">${p.team || 'FA'}</td><td class="num">${age(pid)}</td><td class="num">${f1(S.values[pid]?.ppg)}</td><td class="num hi">${fmt(V(pid))}</td><td class="num">${delta(pid)}</td></tr>`;
+    h += `<tr><td>${posTag(pos(pid))}</td><td class="hi">${esc(p.n)}${tags(pid, r)}</td><td class="dim">${p.team || 'FA'}</td><td class="num">${age(pid)}</td><td class="num">${f1(S.values[pid]?.ppg)}</td><td class="num hi">${fmt(V(pid))}</td><td class="num dim">${MKT(pid) ? fmt(MKT(pid)) : '–'}</td><td class="num dim">${fmt(MOD(pid))}</td><td class="num">${edgeHtml(pid)}</td><td class="num">${delta(pid)}</td></tr>`;
   }
   h += '</tbody></table></div><h2>PICKS</h2><div class="chips">';
   for (const p of picksOf(rid)) h += `<span class="chip">${p.label}${p.orig !== rid ? ' <span class="dim">via ' + esc(teamName(p.orig)) + '</span>' : ''} · ${fmt(p.value)}</span>`;
@@ -232,8 +238,9 @@ function assetsOf(rid) {
 }
 function renderTrade() {
   const sub = S.ui.tradeSub || 'find';
-  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button></div>`;
+  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'edges' ? 'on' : ''}" data-tsub="edges">MARKET EDGES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button></div>`;
   if (sub === 'find') { view.innerHTML = subnav + renderFinder(); return; }
+  if (sub === 'edges') { view.innerHTML = subnav + renderEdges(); return; }
   const T = (S.ui.trade ||= { a: S.myRid, b: S.rosters.find(r => r.roster_id !== S.myRid).roster_id, sa: [], sb: [], qa: '', qb: '' });
   const A = assetsOf(T.a), B = assetsOf(T.b);
   const pickA = A.filter(x => T.sa.includes(x.id)), pickB = B.filter(x => T.sb.includes(x.id));
@@ -242,10 +249,10 @@ function renderTrade() {
   const opts = sel => S.rosters.map(r => `<option value="${r.roster_id}" ${r.roster_id === sel ? 'selected' : ''}>${esc(teamName(r.roster_id))}</option>`).join('');
   const side = (key, rid, list, chosen, q) => `<div class="panel"><div class="row"><select data-side="${key}" class="grow">${opts(rid)}</select></div>
     <div class="note">${key === 'a' ? 'SENDS ↓' : 'SENDS ↓'}</div>
-    <div class="sel">${chosen.map(x => `<span data-rm="${key}:${x.id}">${x.type === 'p' ? posTag(x.pos) : ''} ${esc(x.label)} · ${fmt(x.value)} ✕</span>`).join('') || '<span class="dim" style="border:0;background:none">nothing selected</span>'}</div>
+    <div class="sel">${chosen.map(x => `<span data-rm="${key}:${x.id}">${x.type === 'p' ? posTag(x.pos) : ''} ${esc(x.label)} · ${fmt(x.value)}${x.type === 'p' ? ` <span class="dim">(${MKT(x.id) ? fmt(MKT(x.id)) : '–'}/${fmt(MOD(x.id))})</span>` : ''} ✕</span>`).join('') || '<span class="dim" style="border:0;background:none">nothing selected</span>'}</div>
     <input type="search" placeholder="filter…" data-q="${key}" value="${esc(q)}">
     <div class="list">${list.filter(x => !q || x.label.toLowerCase().includes(q.toLowerCase())).map(x => `<label><input type="checkbox" data-pick="${key}" value="${x.id}" ${(key === 'a' ? T.sa : T.sb).includes(x.id) ? 'checked' : ''}>
-      ${x.type === 'p' ? posTag(x.pos) : '<span class="pos">PK</span>'} <span class="grow hi">${esc(x.label)}</span>${x.taxi ? '<span class="tag taxi">TAXI</span>' : ''}<span class="num">${fmt(x.value)}</span></label>`).join('')}</div></div>`;
+      ${x.type === 'p' ? posTag(x.pos) : '<span class="pos">PK</span>'} <span class="grow hi">${esc(x.label)}</span>${x.taxi ? '<span class="tag taxi">TAXI</span>' : ''}<span class="num">${fmt(x.value)}${x.type === 'p' ? '<br>' + mm(x.id) : ''}</span></label>`).join('')}</div></div>`;
   // warnings: taxi steal rule
   const warn = [];
   const minR = CONFIG.houseRules.taxiStealMinRound;
@@ -293,12 +300,30 @@ function renderFinder() {
     const w = r.why, other = teamName(r.partner);
     const theirNeed = w.theirNeeds.length ? `they're thin at ${w.theirNeeds.map(([g]) => g).join('/')}` : (r.rebuilding ? 'they\'re rebuilding and want picks/youth' : 'value-for-value consolidation');
     h += `<div class="panel"><div class="row"><span class="dim">#${i + 1}</span><b class="hi grow">${esc(other)}</b>${r.rebuilding ? '<span class="tag">REBUILDING</span>' : ''}${r.onTaxi ? '<span class="tag taxi">TAXI STEAL</span>' : ''}</div>
-      <div class="cols" style="margin-top:6px"><div><div class="dim">YOU GET</div><div>${posTag(pos(r.get))} <b class="hi">${esc(P(r.get).n)}</b> <span class="dim">${P(r.get).team || ''} · ${age(r.get)}</span> · ${fmt(V(r.get))}</div></div>
+      <div class="cols" style="margin-top:6px"><div><div class="dim">YOU GET</div><div>${posTag(pos(r.get))} <b class="hi">${esc(P(r.get).n)}</b> <span class="dim">${P(r.get).team || ''} · ${age(r.get)}</span> · ${fmt(V(r.get))}<br>${mm(r.get)}</div></div>
       <div><div class="dim">YOU GIVE</div><div>${r.give.map(label).join(' + ')} · ${fmt(r.giveAdj)}</div></div></div>
       <div class="note">Why: you're short at ${r.getGroup} (need ${w.myNeed.toFixed(2)}), they're deep there · ${theirNeed}. Starter value: you <span class="up">+${fmt(r.myGain)}</span> · them <span class="${r.theirGain >= 0 ? 'up' : 'dn'}">${r.theirGain >= 0 ? '+' : ''}${fmt(r.theirGain)}</span></div>
       <button class="btn" data-loadtrade="${i}" style="margin-top:6px">Open in calculator →</button></div>`;
   });
   return h;
+}
+
+function renderEdges() {
+  const me = S.myRid;
+  const owner = pid => S.rostered.get(pid);
+  const rows = Object.keys(S.values).filter(pid => EDGE(pid) != null && MKT(pid) >= 500 && S.players[pid]?.team);
+  const diff = pid => MOD(pid) - MKT(pid);
+  const buy = rows.filter(pid => owner(pid) && owner(pid) !== me && EDGE(pid) >= 0.15).sort((a, b) => diff(b) - diff(a)).slice(0, 25);
+  const sell = rows.filter(pid => owner(pid) === me && EDGE(pid) <= -0.15).sort((a, b) => diff(a) - diff(b)).slice(0, 15);
+  const fa = rows.filter(pid => !owner(pid) && EDGE(pid) >= 0.15).sort((a, b) => diff(b) - diff(a)).slice(0, 10);
+  const tbl = (list, showOwner) => `<div class="tw"><table><thead><tr><th></th><th>PLAYER</th>${showOwner ? '<th>OWNER</th>' : ''}<th class="num">AGE</th><th class="num">MKT</th><th class="num">MODEL</th><th class="num">EDGE</th><th class="num">VALUE</th></tr></thead><tbody>${
+    list.map(pid => `<tr><td>${posTag(pos(pid))}</td><td class="hi">${esc(P(pid).n)} <span class="dim">${P(pid).team || ''}</span></td>${showOwner ? `<td class="dim">${esc(teamName(owner(pid)))}</td>` : ''}<td class="num">${age(pid)}</td><td class="num">${fmt(MKT(pid))}</td><td class="num">${fmt(MOD(pid))}</td><td class="num">${edgeHtml(pid)}</td><td class="num hi">${fmt(V(pid))}</td></tr>`).join('')
+    || `<tr><td class="dim" colspan="8">none right now</td></tr>`}</tbody></table></div>`;
+  return `<p class="note">MKT = what everyone else sees (consensus superflex values). MODEL = what the player is worth in <b>this league's scoring</b>. A big gap is an edge: other owners price off the market.</p>
+    <h2>BUY TARGETS <small>on other rosters · your scoring values them ≥15% above market</small></h2>${tbl(buy, true)}
+    <h2>SELL CANDIDATES <small>on your roster · market values them ≥15% above your scoring</small></h2>${tbl(sell, false)}
+    <h2>FREE-AGENT EDGES <small>unrostered and undervalued by the market</small></h2>${tbl(fa, false)}
+    <p class="note">IDP has no market price, so it isn't listed here. Every IDP value is model-only, which is already an edge over owners using generic rankings.</p>`;
 }
 
 // ---- DRAFT ----
@@ -391,10 +416,10 @@ function renderWaivers() {
   let h = `<h2>WAIVER WIRE <small>${fa.length} unrostered players</small></h2>
     <div class="chips">${['ALL', ...E.GROUPS].map(p => `<button class="chip ${W.pos === p ? 'on' : ''}" data-wp="${p}">${p}</button>`).join('')}</div>
     <div class="chips">${[['value', 'DYNASTY VALUE'], ['week', 'THIS WEEK'], ['l3', 'HOT (L3)'], ['trend', 'TRENDING ADDS']].map(([k, l]) => `<button class="chip ${W.sort === k ? 'on' : ''}" data-ws="${k}">${l}</button>`).join('')}</div>
-    <div class="tw"><table><thead><tr><th></th><th>PLAYER</th><th>NFL</th><th class="num">AGE</th><th class="num">VALUE</th><th class="num">PPG</th><th class="num">L3</th><th class="num">WK PROJ</th><th class="num">ADDS 48H</th></tr></thead><tbody>`;
+    <div class="tw"><table><thead><tr><th></th><th>PLAYER</th><th>NFL</th><th class="num">AGE</th><th class="num">VALUE</th><th class="num">MKT</th><th class="num">MODEL</th><th class="num">EDGE</th><th class="num">PPG</th><th class="num">L3</th><th class="num">WK PROJ</th><th class="num">ADDS 48H</th></tr></thead><tbody>`;
   for (const x of rows.slice(0, 75)) {
     const p = P(x.pid);
-    h += `<tr><td>${posTag(pos(x.pid))}</td><td class="hi">${esc(p.n)}${p.inj ? `<span class="tag q">${esc(p.inj)}</span>` : ''}</td><td class="dim">${p.team}</td><td class="num">${age(x.pid)}</td><td class="num hi">${fmt(x.value)}</td><td class="num">${f1(x.ppg)}</td><td class="num">${f1(x.l3)}</td><td class="num">${x.wk == null ? '…' : f1(x.wk)}</td><td class="num ${x.tr > 1000 ? 'up' : ''}">${x.tr ? fmt(x.tr) : ''}</td></tr>`;
+    h += `<tr><td>${posTag(pos(x.pid))}</td><td class="hi">${esc(p.n)}${p.inj ? `<span class="tag q">${esc(p.inj)}</span>` : ''}</td><td class="dim">${p.team}</td><td class="num">${age(x.pid)}</td><td class="num hi">${fmt(x.value)}</td><td class="num dim">${MKT(x.pid) ? fmt(MKT(x.pid)) : '–'}</td><td class="num dim">${fmt(MOD(x.pid))}</td><td class="num">${edgeHtml(x.pid)}</td><td class="num">${f1(x.ppg)}</td><td class="num">${f1(x.l3)}</td><td class="num">${x.wk == null ? '…' : f1(x.wk)}</td><td class="num ${x.tr > 1000 ? 'up' : ''}">${x.tr ? fmt(x.tr) : ''}</td></tr>`;
   }
   h += '</tbody></table></div><p class="note">ADDS 48H = Sleeper-wide add count (all leagues) — early signal before your league reacts.</p>';
   view.innerHTML = h;

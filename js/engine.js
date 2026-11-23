@@ -159,7 +159,8 @@ export function computeValues({ players, prod, market, capital, league, teams, m
     let now = nowRaw > 0 ? toScale(nowRaw) : 0;
     if (x.pos === 'K') now = Math.min(now, 400);
     if (IDP.includes(x.pos)) now *= idpWeight;
-    values[x.pid] = { value: Math.round(v), dyn: Math.round(v), now: Math.round(now), ppg: Math.round(x.ppg * 10) / 10, model: Math.round(modelV), market: m || null, pos: x.pos };
+    const shownModel = x.pos === 'K' ? Math.min(modelV, 400) : IDP.includes(x.pos) ? modelV * idpWeight : modelV;
+    values[x.pid] = { value: Math.round(v), dyn: Math.round(v), now: Math.round(now), ppg: Math.round(x.ppg * 10) / 10, model: Math.round(shownModel), market: m || null, pos: x.pos, games: (prod[x.pid]?.cur?.gp || 0) + (prod[x.pid]?.prev?.gp || 0) };
   }
   return { values, repl, starters, waiverRepl };
 }
