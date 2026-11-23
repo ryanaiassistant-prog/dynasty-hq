@@ -56,6 +56,11 @@ with sync_playwright() as p:
             pg.click(f'nav button[data-tab="{tab}"]'); pg.wait_for_timeout(700)
             if tab == 'teams': pg.click('[data-mode="now"]'); pg.wait_for_timeout(300); pg.click('tr[data-team]'); pg.wait_for_timeout(300)
             if tab == 'trade':
+                pg.evaluate('window.scrollTo(0,0)'); pg.screenshot(path=f'{OUT}/{label}-finder.png', full_page=(label == 'desktop'))
+                print('finder:', pg.inner_text('#view')[:900])
+                pg.click('[data-loadtrade="0"]'); pg.wait_for_timeout(400)
+                pg.screenshot(path=f'{OUT}/{label}-loaded.png')
+                pg.click('[data-tsub="calc"]'); pg.wait_for_timeout(200)
                 pg.locator('input[data-pick="a"]').nth(0).click(); pg.wait_for_timeout(200)
                 pg.locator('input[data-pick="b"]').nth(2).click(); pg.wait_for_timeout(200)
                 pg.locator('input[data-pick="b"]').nth(5).click(); pg.wait_for_timeout(300)

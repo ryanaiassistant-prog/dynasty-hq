@@ -351,3 +351,78 @@ export function winProb(a, b) {
   const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z);
   return 0.5 * (1 + (z >= 0 ? y : -y));
 }
+
+// ---------- trade finder ----------
+/**
+ * Finds mutually beneficial trades for team `me`.
+ * val: {pid: number} in the active mode. picks: valued pick objects. standingsRank: rid → 1..n (1 = best).
+ */
+export function findTrades({ me, rosters, players, val, picks, standingsRank, taxiMinRound = 2, limit = 12 }) {
+  const vo = {}; for (const k in val) vo[k] = { value: val[k] };
+  const V = pid => val[pid] || 0;
+  const tot = s => Object.values(s).reduce((a, b) => a + b, 0);
+  const str = pids => teamGroupStrength(pids, players, vo);
+  const { needs } = teamNeeds(rosters, players, vo);
+  const R = Object.fromEntries(rosters.map(r => [r.roster_id, r]));
+  const base = {}; for (const r of rosters) base[r.roster_id] = str(r.players || []);
+  const n = rosters.length;
+  const myR = R[me], mine = myR.players || [];
+  const myPlayers = mine.filter(p => V(p) >= 150).sort((a, b) => V(b) - V(a)).slice(0, 20).map(pid => ({ kind: 'p', id: pid, v: V(pid) }));
+  const myPicks = picks.filter(p => p.owner === me && p.value >= 80).sort((a, b) => b.value - a.value).slice(0, 8).map(p => ({ kind: 'k', id: p.id, v: p.value, round: p.round, label: p.label }));
+  const pieces = [...myPlayers, ...myPicks];
+  const pkgs = [];
+  for (let i = 0; i < pieces.length; i++) {
+    pkgs.push([pieces[i]]);
+    for (let j = i + 1; j < pieces.length; j++) pkgs.push([pieces[i], pieces[j]]);
+  }
+  const results = [];
+  for (const T of rosters) {
+    const t = T.roster_id; if (t === me) continue;
+    const rebuilding = standingsRank[t] > n * 0.66;
+    const targets = (T.players || []).filter(pid => {
+      const pl = players[pid]; if (!pl || !pl.team || pl.inj === 'IR') return false;
+      const g = primaryPos(pl); if (!GROUPS.includes(g) || g === 'K') return false;
+      return V(pid) >= 400 && needs[me][g] >= 1.0 && needs[t][g] <= 1.1;
+    }).sort((a, b) => V(b) - V(a)).slice(0, 6);
+    for (const tgt of targets) {
+      const tv = tradeSide([V(tgt)]).adj;
+      const onTaxi = (T.taxi || []).includes(tgt);
+      let best = null;
+      for (const pk of pkgs) {
+        const side = tradeSide(pk.map(x => x.v));
+        if (side.adj < tv * 0.96 || side.adj > tv * 1.06) continue;
+        if (onTaxi && !pk.some(x => x.kind === 'k' && x.round <= taxiMinRound)) continue;
+        const outP = new Set(pk.filter(x => x.kind === 'p').map(x => x.id));
+        const myAfter = str([...mine.filter(p => !outP.has(p)), tgt]);
+        const gainMe = tot(myAfter) - tot(base[me]);
+        if (gainMe <= 0) continue;
+        const theirAfter = str([...(T.players || []).filter(p => p !== tgt), ...outP]);
+        let gainT = tot(theirAfter) - tot(base[t]);
+        const pickV = pk.filter(x => x.kind === 'k').reduce((a, x) => a + x.v, 0);
+        if (rebuilding) gainT += pickV * 0.6; else gainT += pickV * 0.2;
+        if (gainT < -0.15 * tv) continue; // they'd balk
+        const overpay = side.adj - tv;
+        const score = gainMe + 0.4 * Math.min(Math.max(gainT, 0), gainMe) - 0.3 * Math.max(0, overpay);
+        if (!best || score > best.score) best = { score, pk, gainMe, gainT, side, tv };
+      }
+      if (best) {
+        const g = primaryPos(players[tgt]);
+        const giveGroups = [...new Set(best.pk.filter(x => x.kind === 'p').map(x => primaryPos(players[x.id])))];
+        results.push({
+          partner: t, get: tgt, getGroup: g, give: best.pk, myGain: Math.round(best.gainMe), theirGain: Math.round(best.gainT),
+          giveAdj: best.side.adj, getAdj: Math.round(best.tv), score: best.score, rebuilding, onTaxi,
+          why: { myNeed: needs[me][g], theirDepth: needs[t][g], theirNeeds: giveGroups.filter(x => needs[t][x] > 1.02).map(x => [x, needs[t][x]]) },
+        });
+      }
+    }
+  }
+  results.sort((a, b) => b.score - a.score);
+  const seen = new Set(), out = [], perTeam = {};
+  for (const r of results) {
+    if (seen.has(r.get)) continue;
+    if ((perTeam[r.partner] || 0) >= 2) continue;
+    seen.add(r.get); perTeam[r.partner] = (perTeam[r.partner] || 0) + 1; out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}

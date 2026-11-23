@@ -230,6 +230,9 @@ function assetsOf(rid) {
   return [...pl.sort((a, b) => b.value - a.value), ...pk];
 }
 function renderTrade() {
+  const sub = S.ui.tradeSub || 'find';
+  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button></div>`;
+  if (sub === 'find') { view.innerHTML = subnav + renderFinder(); return; }
   const T = (S.ui.trade ||= { a: S.myRid, b: S.rosters.find(r => r.roster_id !== S.myRid).roster_id, sa: [], sb: [], qa: '', qb: '' });
   const A = assetsOf(T.a), B = assetsOf(T.b);
   const pickA = A.filter(x => T.sa.includes(x.id)), pickB = B.filter(x => T.sb.includes(x.id));
@@ -260,13 +263,41 @@ function renderTrade() {
     sug = `<div class="note">To balance, <b class="hi">${esc(teamName(shortRid))}</b> adds ~${fmt(gap)}: ${cand.map(x => `${esc(x.label)} (${fmt(x.value)})`).join(' · ')}</div>`;
   }
   const max = Math.max(sa.adj, sb.adj, 1);
-  view.innerHTML = `${tradeLocked() ? `<div class="banner">TRADES LOCKED — deadline was week ${S.league.settings.trade_deadline}. Reopens for the rookie draft. Calculator still works for planning.</div>` : ''}
+  view.innerHTML = subnav + `${tradeLocked() ? `<div class="banner">TRADES LOCKED — deadline was week ${S.league.settings.trade_deadline}. Reopens for the rookie draft. Calculator still works for planning.</div>` : ''}
     <div class="panel"><div class="row"><div class="grow"><div class="dim">${esc(teamName(T.a))} sends</div><div class="big">${fmt(sa.adj)}</div><div class="bar"><i style="width:${(sa.adj / max) * 100}%"></i></div></div>
     <div class="grow" style="text-align:right"><div class="dim">${esc(teamName(T.b))} sends</div><div class="big">${fmt(sb.adj)}</div><div class="bar" style="direction:rtl"><i style="width:${(sb.adj / max) * 100}%"></i></div></div></div>
     <div style="text-align:center;margin-top:8px" class="verdict ${v.text === 'FAIR' ? 'up' : 'amb'}">${v.text === 'FAIR' ? 'FAIR TRADE' : (v.diff > 0 ? esc(teamName(T.b)) : esc(teamName(T.a))) + ' WINS BY ' + fmt(Math.abs(v.diff))} <span class="dim">(${(Math.abs(v.pct) * 100).toFixed(0)}%)</span></div>
     ${sug}<div class="note">Adjusted totals give a premium to the side getting the best single asset (2 nickels ≠ a quarter). Raw sums: ${fmt(sa.raw)} vs ${fmt(sb.raw)}.</div></div>
     ${warn.map(w => `<div class="banner red">${w}</div>`).join('')}
     <div class="cols">${side('a', T.a, A, pickA, T.qa)}${side('b', T.b, B, pickB, T.qb)}</div>`;
+}
+
+
+function renderFinder() {
+  const rid = S.ui.finderRid ?? S.myRid;
+  const key = `${rid}:${S.mode}`;
+  if (!S.finderCache || S.finderCache.key !== key) {
+    const val = {}; for (const k in S.values) val[k] = S.values[k][S.mode];
+    const rank = {}; E.standings(S.rosters).forEach((s, i) => (rank[s.rid] = i + 1));
+    S.finderCache = { key, list: E.findTrades({ me: rid, rosters: S.rosters, players: S.players, val, picks: S.picks, standingsRank: rank, taxiMinRound: CONFIG.houseRules.taxiStealMinRound }) };
+  }
+  const list = S.finderCache.list;
+  const label = x => x.kind === 'p' ? `${posTag(pos(x.id))} ${esc(P(x.id).n)}` : `<span class="pos">PK</span> ${esc(x.label)}`;
+  let h = `${tradeLocked() ? `<div class="banner">Trades are locked until the rookie draft. These are targets to line up for when the window reopens.</div>` : ''}
+    <div class="row"><select id="finderTeam">${S.rosters.map(x => `<option value="${x.roster_id}" ${x.roster_id === rid ? 'selected' : ''}>${esc(teamName(x.roster_id))}</option>`).join('')}</select>
+    <span class="dim">${S.mode === 'now' ? 'WIN-NOW mode: upgrades this season' : 'DYNASTY mode: long-term upgrades'} · toggle top-right</span></div>
+    <p class="note">Each deal upgrades your weakest starting spots, gives the other team help where they're thin (or picks if they're rebuilding), and is within about 5% on value (FAIR in the calculator). Taxi-steal rule enforced.</p>`;
+  if (!list.length) return h + '<div class="banner">No clean deals found. Your lineup is already strong where other teams have surplus. Try the other mode.</div>';
+  list.forEach((r, i) => {
+    const w = r.why, other = teamName(r.partner);
+    const theirNeed = w.theirNeeds.length ? `they're thin at ${w.theirNeeds.map(([g]) => g).join('/')}` : (r.rebuilding ? 'they\'re rebuilding and want picks/youth' : 'value-for-value consolidation');
+    h += `<div class="panel"><div class="row"><span class="dim">#${i + 1}</span><b class="hi grow">${esc(other)}</b>${r.rebuilding ? '<span class="tag">REBUILDING</span>' : ''}${r.onTaxi ? '<span class="tag taxi">TAXI STEAL</span>' : ''}</div>
+      <div class="cols" style="margin-top:6px"><div><div class="dim">YOU GET</div><div>${posTag(pos(r.get))} <b class="hi">${esc(P(r.get).n)}</b> <span class="dim">${P(r.get).team || ''} · ${age(r.get)}</span> · ${fmt(V(r.get))}</div></div>
+      <div><div class="dim">YOU GIVE</div><div>${r.give.map(label).join(' + ')} · ${fmt(r.giveAdj)}</div></div></div>
+      <div class="note">Why: you're short at ${r.getGroup} (need ${w.myNeed.toFixed(2)}), they're deep there · ${theirNeed}. Starter value: you <span class="up">+${fmt(r.myGain)}</span> · them <span class="${r.theirGain >= 0 ? 'up' : 'dn'}">${r.theirGain >= 0 ? '+' : ''}${fmt(r.theirGain)}</span></div>
+      <button class="btn" data-loadtrade="${i}" style="margin-top:6px">Open in calculator →</button></div>`;
+  });
+  return h;
 }
 
 // ---- DRAFT ----
@@ -370,9 +401,14 @@ function renderWaivers() {
 
 // ---------------- events ----------------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-mode],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
+  const t = e.target.closest('[data-tsub],[data-loadtrade],[data-mode],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
   if (!t) return;
-  if (t.dataset.mode) { S.mode = t.dataset.mode; localStorage.setItem('dhq-mode', S.mode); refreshDerived(); render(); }
+  if (t.dataset.tsub) { S.ui.tradeSub = t.dataset.tsub; render(); }
+  else if (t.dataset.loadtrade) {
+    const r = S.finderCache.list[+t.dataset.loadtrade], me = S.ui.finderRid ?? S.myRid;
+    S.ui.trade = { a: me, b: r.partner, sa: r.give.map(x => x.id), sb: [r.get], qa: '', qb: '' }; S.ui.tradeSub = 'calc'; render(); window.scrollTo(0, 0);
+  }
+  else if (t.dataset.mode) { S.mode = t.dataset.mode; localStorage.setItem('dhq-mode', S.mode); refreshDerived(); render(); }
   else if (t.dataset.tab) { S.tab = t.dataset.tab; localStorage.setItem('dhq-tab', S.tab); render(); window.scrollTo(0, 0); }
   else if (t.dataset.team) { const r = +t.dataset.team; S.ui.openTeam = S.ui.openTeam === r ? null : r; render(); }
   else if (t.dataset.ts) { S.ui.teamSort = t.dataset.ts; render(); }
@@ -386,6 +422,7 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.side) { const T = S.ui.trade; T[t.dataset.side] = +t.value; T['s' + t.dataset.side] = []; render(); }
   else if (t.dataset.pick) { const T = S.ui.trade, k = 's' + t.dataset.pick; T[k] = t.checked ? [...T[k], t.value] : T[k].filter(x => x !== t.value); const y = window.scrollY; render(); window.scrollTo(0, y); }
+  else if (t.id === 'finderTeam') { S.ui.finderRid = +t.value; render(); }
   else if (t.id === 'lineupTeam') { S.ui.lineupRid = +t.value; render(); }
 });
 document.addEventListener('input', e => {
