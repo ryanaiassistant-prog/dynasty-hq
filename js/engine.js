@@ -107,7 +107,7 @@ export const ecrToValue = ecr => Math.round(10116 * Math.exp(-0.02328 * ecr));
  * market: {pid: value}  (superflex market, offense only)
  * capital: {pid: {dr, do}} draft round / overall
  */
-export function computeValues({ players, prod, market, capital, league, teams, marketWeight = 0.65, idpWeight = 0.8 }) {
+export function computeValues({ players, prod, market, capital, league, teams, marketWeight = 0.65, idpWeight = 0.8, rostered = null }) {
   const rp = league.roster_positions;
   const pool = [];
   for (const pid in players) {
@@ -135,6 +135,18 @@ export function computeValues({ players, prod, market, capital, league, teams, m
   const fit = fitLogLog(pool.filter(x => OFF.includes(x.pos) && market[x.pid] > 300).map(x => [raw[x.pid], market[x.pid]]));
   const maxRaw = Math.max(1, ...Object.values(raw));
   const toScale = fit || (r => (r / maxRaw) * 9500);
+  // WIN-NOW baseline = what you can actually grab off waivers (avg of top-3 unrostered at the position, this season)
+  const curPPG = pid => (prod[pid]?.cur?.gp ? prod[pid].cur.pts / prod[pid].cur.gp : null);
+  const waiverRepl = {};
+  for (const pos of GROUPS) {
+    const fa = pool.filter(x => x.pos === pos && players[x.pid].team && (!rostered || !rostered.has(x.pid)) && (prod[x.pid]?.cur?.gp || 0) >= 3)
+      .map(x => curPPG(x.pid)).filter(v => v != null).sort((a, b) => b - a).slice(0, 3);
+    waiverRepl[pos] = fa.length ? fa.reduce((a, b) => a + b, 0) / fa.length : repl[pos] * 0.75;
+  }
+  const nowRawOf = x => { const c = curPPG(x.pid) ?? x.ppg; return Math.max(0, c - waiverRepl[x.pos]) * 17; };
+  // calibrate win-now raw onto the dynasty scale (match the top-100 medians)
+  const med = a => { const b = a.filter(v => v > 0).sort((p, q) => q - p).slice(0, 100); return b.length ? b[Math.floor(b.length / 2)] : 1; };
+  const calib = med(pool.map(x => raw[x.pid])) / Math.max(1, med(pool.map(nowRawOf)));
   const values = {};
   for (const x of pool) {
     const modelV = raw[x.pid] > 0 ? toScale(raw[x.pid]) : 0;
@@ -143,14 +155,13 @@ export function computeValues({ players, prod, market, capital, league, teams, m
     if (x.pos === 'K') v = Math.min(v, 400);
     if (IDP.includes(x.pos)) v *= idpWeight;
     // WIN-NOW: current production over replacement, no age penalty (what he's worth to a contender this year)
-    const curPPG = prod[x.pid]?.cur?.gp ? prod[x.pid].cur.pts / prod[x.pid].cur.gp : x.ppg;
-    const nowRaw = Math.max(0, curPPG - repl[x.pos]) * 17 * 3;
+    const nowRaw = nowRawOf(x) * calib;
     let now = nowRaw > 0 ? toScale(nowRaw) : 0;
     if (x.pos === 'K') now = Math.min(now, 400);
     if (IDP.includes(x.pos)) now *= idpWeight;
     values[x.pid] = { value: Math.round(v), dyn: Math.round(v), now: Math.round(now), ppg: Math.round(x.ppg * 10) / 10, model: Math.round(modelV), market: m || null, pos: x.pos };
   }
-  return { values, repl, starters };
+  return { values, repl, starters, waiverRepl };
 }
 
 // ---------- picks ----------

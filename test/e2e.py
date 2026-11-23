@@ -54,7 +54,7 @@ with sync_playwright() as p:
         pg.wait_for_timeout(1500)
         for tab in ['teams', 'trade', 'draft', 'lineup', 'waivers']:
             pg.click(f'nav button[data-tab="{tab}"]'); pg.wait_for_timeout(700)
-            if tab == 'teams': pg.click('[data-mode="now"]'); pg.wait_for_timeout(300); pg.click('tr[data-team]'); pg.wait_for_timeout(300)
+            if tab == 'teams': pg.click('tr[data-team]'); pg.wait_for_timeout(300)
             if tab == 'trade':
                 pg.evaluate('window.scrollTo(0,0)'); pg.screenshot(path=f'{OUT}/{label}-finder.png', full_page=(label == 'desktop'))
                 print('finder:', pg.inner_text('#view')[:900])

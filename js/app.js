@@ -4,7 +4,8 @@ import * as E from './engine.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
-const S = { tab: localStorage.getItem('dhq-tab') || 'teams', ui: {}, mode: localStorage.getItem('dhq-mode') || 'dyn' };
+const S = { tab: localStorage.getItem('dhq-tab') || 'teams', ui: {}, mode: 'dyn' };
+try { localStorage.removeItem('dhq-mode'); } catch { /* ignore */ }
 const fmt = n => (n == null || isNaN(n) ? '–' : Math.round(n).toLocaleString());
 const f1 = n => (n == null || isNaN(n) ? '–' : (Math.round(n * 10) / 10).toFixed(1));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -53,7 +54,7 @@ async function boot() {
     const prod = {};
     for (const pid in players) prod[pid] = { cur: cur[pid], prev: prev[pid] };
     const { values, repl } = E.computeValues({
-      players, prod, market: market.market, capital: market.capital, league, teams: rosters.length, marketWeight: CONFIG.marketWeight, idpWeight: CONFIG.idpWeight,
+      players, prod, market: market.market, capital: market.capital, league, teams: rosters.length, marketWeight: CONFIG.marketWeight, idpWeight: CONFIG.idpWeight, rostered: new Set(S.rostered.keys()),
     });
     S.values = values; S.repl = repl;
     trackValueDeltas(values);
@@ -186,7 +187,7 @@ function render() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   if (!S.loaded) return;
   const L = S.league, st = S.state;
-  $('#meta').innerHTML = `<div class="chips" style="justify-content:flex-end;margin:0 0 4px"><button class="chip ${S.mode === 'dyn' ? 'on' : ''}" data-mode="dyn">DYNASTY</button><button class="chip ${S.mode === 'now' ? 'on' : ''}" data-mode="now">WIN-NOW</button></div>${esc(L.name)}<br>${L.season} · ${st.season_type === 'regular' ? 'WK ' + st.week : st.season_type}`;
+  $('#meta').innerHTML = `${esc(L.name)}<br>${L.season} · ${st.season_type === 'regular' ? 'WK ' + st.week : st.season_type}`;
   $('#foot').innerHTML = `Live: Sleeper API (rosters, picks, stats, projections) · Market: <a href="https://github.com/dynastyprocess/data" target="_blank">DynastyProcess</a> superflex values blended ${Math.round(CONFIG.marketWeight * 100)}/${100 - Math.round(CONFIG.marketWeight * 100)} with a model built on your league's scoring (IDP = model only) · Schedule & Vegas lines: nflverse · Rookies: ${esc(S.boardSource)}<br><button class="btn ghost" id="refresh">↻ force refresh</button>`;
   ({ teams: renderTeams, trade: renderTrade, draft: renderDraft, lineup: renderLineup, waivers: renderWaivers })[S.tab]();
 }
@@ -198,7 +199,7 @@ function renderTeams() {
   sum.sort((a, b) => sortKey === 'age' ? (a.age || 99) - (b.age || 99) : b[sortKey] - a[sortKey]);
   const max = Math.max(...sum.map(s => s.total));
   const open = S.ui.openTeam;
-  let h = `<h2>POWER RANKINGS <small>${S.mode === 'now' ? 'WIN-NOW: this season\'s production over replacement, age ignored' : 'DYNASTY: long-term value'} · players + picks · tap a team</small></h2><div class="tw"><table><thead><tr>
+  let h = `<h2>POWER RANKINGS <small>dynasty value = players + picks · tap a team</small></h2><div class="tw"><table><thead><tr>
     <th>#</th><th>TEAM</th><th class="num">W-L</th><th class="num sort" data-ts="starters">STARTERS</th><th class="num sort" data-ts="pv">ROSTER</th><th class="num sort" data-ts="pk">PICKS</th><th class="num sort" data-ts="total">TOTAL</th><th class="num sort" data-ts="age">AGE</th><th style="width:80px"></th></tr></thead><tbody>`;
   sum.forEach((s, i) => {
     h += `<tr class="click ${s.rid === S.myRid ? 'me' : ''}" data-team="${s.rid}"><td class="dim">${i + 1}</td><td class="hi">${esc(teamName(s.rid))}<div class="dim" style="font-size:10px">${esc(S.teams[s.rid].user)}</div></td>
@@ -285,7 +286,7 @@ function renderFinder() {
   const label = x => x.kind === 'p' ? `${posTag(pos(x.id))} ${esc(P(x.id).n)}` : `<span class="pos">PK</span> ${esc(x.label)}`;
   let h = `${tradeLocked() ? `<div class="banner">Trades are locked until the rookie draft. These are targets to line up for when the window reopens.</div>` : ''}
     <div class="row"><select id="finderTeam">${S.rosters.map(x => `<option value="${x.roster_id}" ${x.roster_id === rid ? 'selected' : ''}>${esc(teamName(x.roster_id))}</option>`).join('')}</select>
-    <span class="dim">${S.mode === 'now' ? 'WIN-NOW mode: upgrades this season' : 'DYNASTY mode: long-term upgrades'} · toggle top-right</span></div>
+</div>
     <p class="note">Each deal upgrades your weakest starting spots, gives the other team help where they're thin (or picks if they're rebuilding), and is within about 5% on value (FAIR in the calculator). Taxi-steal rule enforced.</p>`;
   if (!list.length) return h + '<div class="banner">No clean deals found. Your lineup is already strong where other teams have surplus. Try the other mode.</div>';
   list.forEach((r, i) => {
@@ -401,14 +402,13 @@ function renderWaivers() {
 
 // ---------------- events ----------------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tsub],[data-loadtrade],[data-mode],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
+  const t = e.target.closest('[data-tsub],[data-loadtrade],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
   if (!t) return;
   if (t.dataset.tsub) { S.ui.tradeSub = t.dataset.tsub; render(); }
   else if (t.dataset.loadtrade) {
     const r = S.finderCache.list[+t.dataset.loadtrade], me = S.ui.finderRid ?? S.myRid;
     S.ui.trade = { a: me, b: r.partner, sa: r.give.map(x => x.id), sb: [r.get], qa: '', qb: '' }; S.ui.tradeSub = 'calc'; render(); window.scrollTo(0, 0);
   }
-  else if (t.dataset.mode) { S.mode = t.dataset.mode; localStorage.setItem('dhq-mode', S.mode); refreshDerived(); render(); }
   else if (t.dataset.tab) { S.tab = t.dataset.tab; localStorage.setItem('dhq-tab', S.tab); render(); window.scrollTo(0, 0); }
   else if (t.dataset.team) { const r = +t.dataset.team; S.ui.openTeam = S.ui.openTeam === r ? null : r; render(); }
   else if (t.dataset.ts) { S.ui.teamSort = t.dataset.ts; render(); }
