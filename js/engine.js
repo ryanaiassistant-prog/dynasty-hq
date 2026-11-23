@@ -72,7 +72,7 @@ export function replacementLevels(pool, rosterPositions, teams) {
 
 // ---------- age curves ----------
 const CURVE = {
-  QB: { peak: [24, 33], dec: 0.12 }, RB: { peak: [22, 26], dec: 0.22 }, WR: { peak: [23, 29], dec: 0.14 },
+  QB: { peak: [24, 33], dec: 0.12 }, RB: { peak: [22, 27], dec: 0.17 }, WR: { peak: [23, 29], dec: 0.14 },
   TE: { peak: [24, 30], dec: 0.14 }, K: { peak: [23, 38], dec: 0.06 },
   DL: { peak: [24, 30], dec: 0.13 }, LB: { peak: [23, 29], dec: 0.15 }, DB: { peak: [23, 29], dec: 0.15 },
 };
@@ -142,7 +142,13 @@ export function computeValues({ players, prod, market, capital, league, teams, m
     let v = m ? marketWeight * m + (1 - marketWeight) * modelV : modelV;
     if (x.pos === 'K') v = Math.min(v, 400);
     if (IDP.includes(x.pos)) v *= idpWeight;
-    values[x.pid] = { value: Math.round(v), ppg: Math.round(x.ppg * 10) / 10, model: Math.round(modelV), market: m || null, pos: x.pos };
+    // WIN-NOW: current production over replacement, no age penalty (what he's worth to a contender this year)
+    const curPPG = prod[x.pid]?.cur?.gp ? prod[x.pid].cur.pts / prod[x.pid].cur.gp : x.ppg;
+    const nowRaw = Math.max(0, curPPG - repl[x.pos]) * 17 * 3;
+    let now = nowRaw > 0 ? toScale(nowRaw) : 0;
+    if (x.pos === 'K') now = Math.min(now, 400);
+    if (IDP.includes(x.pos)) now *= idpWeight;
+    values[x.pid] = { value: Math.round(v), dyn: Math.round(v), now: Math.round(now), ppg: Math.round(x.ppg * 10) / 10, model: Math.round(modelV), market: m || null, pos: x.pos };
   }
   return { values, repl, starters };
 }

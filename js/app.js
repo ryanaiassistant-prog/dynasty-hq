@@ -4,7 +4,7 @@ import * as E from './engine.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
-const S = { tab: localStorage.getItem('dhq-tab') || 'teams', ui: {} };
+const S = { tab: localStorage.getItem('dhq-tab') || 'teams', ui: {}, mode: localStorage.getItem('dhq-mode') || 'dyn' };
 const fmt = n => (n == null || isNaN(n) ? '–' : Math.round(n).toLocaleString());
 const f1 = n => (n == null || isNaN(n) ? '–' : (Math.round(n * 10) / 10).toFixed(1));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -69,11 +69,13 @@ async function boot() {
   }
 }
 
+function modeValues() { const o = {}; for (const k in S.values) o[k] = { value: S.values[k][S.mode] }; return o; }
+function refreshDerived() { const t = E.teamNeeds(S.rosters, S.players, modeValues()); S.strength = t.strength; }
 function trackValueDeltas(values) {
   try {
     const raw = JSON.parse(localStorage.getItem('dhq-vsnap') || 'null');
     const now = Date.now();
-    const cur = Object.fromEntries(Object.entries(values).filter(([, v]) => v.value > 200).map(([k, v]) => [k, v.value]));
+    const cur = Object.fromEntries(Object.entries(values).filter(([, v]) => v.dyn > 200).map(([k, v]) => [k, v.dyn]));
     if (!raw) { localStorage.setItem('dhq-vsnap', JSON.stringify({ t: now, prev: cur, cur })); S.prevVals = {}; return; }
     if (now - raw.t > 20 * 3600e3) { localStorage.setItem('dhq-vsnap', JSON.stringify({ t: now, prev: raw.cur, cur })); S.prevVals = raw.cur; }
     else S.prevVals = raw.prev || {};
@@ -111,7 +113,7 @@ function computePicksAndDraft(rookieFile) {
   S.board = E.buildRookieBoard({ offense, idp, pm });
   S.boardSource = source;
 
-  const { needs, strength } = E.teamNeeds(S.rosters, S.players, S.values);
+  const { needs, strength } = E.teamNeeds(S.rosters, S.players, modeValues());
   S.needs = needs; S.strength = strength;
   const draftPicks = S.picks.filter(p => p.season === draftSeason).sort((a, b) => a.overall - b.overall);
   S.mock = E.mockDraft(draftPicks, S.board, needs);
@@ -142,7 +144,7 @@ async function loadWeekly() {
 
 // ---------------- helpers ----------------
 const P = pid => S.players[pid] || { n: `#${pid}`, pos: '?', fp: [] };
-const V = pid => S.values[pid]?.value || 0;
+const V = pid => S.values[pid]?.[S.mode] || 0;
 const pos = pid => E.primaryPos(P(pid));
 const posTag = p => `<span class="pos ${p}">${p}</span>`;
 const teamName = rid => S.teams[rid]?.name || `Team ${rid}`;
@@ -155,7 +157,7 @@ function tags(pid, roster) {
   return t;
 }
 function delta(pid) {
-  const prev = S.prevVals?.[pid]; if (!prev) return '';
+  const prev = S.prevVals?.[pid]; if (!prev || S.mode !== 'dyn') return '';
   const d = V(pid) - prev; if (Math.abs(d) < 25) return '';
   return `<span class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${fmt(Math.abs(d))}</span>`;
 }
@@ -184,7 +186,7 @@ function render() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   if (!S.loaded) return;
   const L = S.league, st = S.state;
-  $('#meta').innerHTML = `${esc(L.name)}<br>${L.season} · ${st.season_type === 'regular' ? 'WK ' + st.week : st.season_type}`;
+  $('#meta').innerHTML = `<div class="chips" style="justify-content:flex-end;margin:0 0 4px"><button class="chip ${S.mode === 'dyn' ? 'on' : ''}" data-mode="dyn">DYNASTY</button><button class="chip ${S.mode === 'now' ? 'on' : ''}" data-mode="now">WIN-NOW</button></div>${esc(L.name)}<br>${L.season} · ${st.season_type === 'regular' ? 'WK ' + st.week : st.season_type}`;
   $('#foot').innerHTML = `Live: Sleeper API (rosters, picks, stats, projections) · Market: <a href="https://github.com/dynastyprocess/data" target="_blank">DynastyProcess</a> superflex values blended ${Math.round(CONFIG.marketWeight * 100)}/${100 - Math.round(CONFIG.marketWeight * 100)} with a model built on your league's scoring (IDP = model only) · Schedule & Vegas lines: nflverse · Rookies: ${esc(S.boardSource)}<br><button class="btn ghost" id="refresh">↻ force refresh</button>`;
   ({ teams: renderTeams, trade: renderTrade, draft: renderDraft, lineup: renderLineup, waivers: renderWaivers })[S.tab]();
 }
@@ -196,7 +198,7 @@ function renderTeams() {
   sum.sort((a, b) => sortKey === 'age' ? (a.age || 99) - (b.age || 99) : b[sortKey] - a[sortKey]);
   const max = Math.max(...sum.map(s => s.total));
   const open = S.ui.openTeam;
-  let h = `<h2>POWER RANKINGS <small>dynasty value = players + picks · tap a team</small></h2><div class="tw"><table><thead><tr>
+  let h = `<h2>POWER RANKINGS <small>${S.mode === 'now' ? 'WIN-NOW: this season\'s production over replacement, age ignored' : 'DYNASTY: long-term value'} · players + picks · tap a team</small></h2><div class="tw"><table><thead><tr>
     <th>#</th><th>TEAM</th><th class="num">W-L</th><th class="num sort" data-ts="starters">STARTERS</th><th class="num sort" data-ts="pv">ROSTER</th><th class="num sort" data-ts="pk">PICKS</th><th class="num sort" data-ts="total">TOTAL</th><th class="num sort" data-ts="age">AGE</th><th style="width:80px"></th></tr></thead><tbody>`;
   sum.forEach((s, i) => {
     h += `<tr class="click ${s.rid === S.myRid ? 'me' : ''}" data-team="${s.rid}"><td class="dim">${i + 1}</td><td class="hi">${esc(teamName(s.rid))}<div class="dim" style="font-size:10px">${esc(S.teams[s.rid].user)}</div></td>
@@ -368,9 +370,10 @@ function renderWaivers() {
 
 // ---------------- events ----------------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
+  const t = e.target.closest('[data-mode],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
   if (!t) return;
-  if (t.dataset.tab) { S.tab = t.dataset.tab; localStorage.setItem('dhq-tab', S.tab); render(); window.scrollTo(0, 0); }
+  if (t.dataset.mode) { S.mode = t.dataset.mode; localStorage.setItem('dhq-mode', S.mode); refreshDerived(); render(); }
+  else if (t.dataset.tab) { S.tab = t.dataset.tab; localStorage.setItem('dhq-tab', S.tab); render(); window.scrollTo(0, 0); }
   else if (t.dataset.team) { const r = +t.dataset.team; S.ui.openTeam = S.ui.openTeam === r ? null : r; render(); }
   else if (t.dataset.ts) { S.ui.teamSort = t.dataset.ts; render(); }
   else if (t.dataset.mr) { S.ui.mockRound = t.dataset.mr === 'ALL' ? 'ALL' : +t.dataset.mr; render(); }

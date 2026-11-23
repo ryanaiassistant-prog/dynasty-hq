@@ -54,7 +54,7 @@ with sync_playwright() as p:
         pg.wait_for_timeout(1500)
         for tab in ['teams', 'trade', 'draft', 'lineup', 'waivers']:
             pg.click(f'nav button[data-tab="{tab}"]'); pg.wait_for_timeout(700)
-            if tab == 'teams': pg.click('tr[data-team]'); pg.wait_for_timeout(300)
+            if tab == 'teams': pg.click('[data-mode="now"]'); pg.wait_for_timeout(300); pg.click('tr[data-team]'); pg.wait_for_timeout(300)
             if tab == 'trade':
                 pg.locator('input[data-pick="a"]').nth(0).click(); pg.wait_for_timeout(200)
                 pg.locator('input[data-pick="b"]').nth(2).click(); pg.wait_for_timeout(200)
