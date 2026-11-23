@@ -107,6 +107,33 @@ export const ecrToValue = ecr => Math.round(10116 * Math.exp(-0.02328 * ecr));
  * market: {pid: value}  (superflex market, offense only)
  * capital: {pid: {dr, do}} draft round / overall
  */
+// Final display scale: overall rank in the relevant universe (offense + IDP) → value. #1 ≈ 10,000 · #100 ≈ 4,900 · #300 ≈ 1,800 · #500 ≈ 900
+export const rankCurve = r => 10000 / Math.pow(1 + (r - 1) / 300, 2.48);
+
+/** Build a monotone map from the raw (steep) scale onto the flat display scale, using the ranking of `olds`. */
+export function buildScaleMap(olds) {
+  const xs = olds.filter(v => v > 0).sort((a, b) => b - a);
+  const ys = xs.map((_, i) => rankCurve(i + 1));
+  const g = x => {
+    if (!(x > 0) || !xs.length) return 0;
+    if (x >= xs[0]) return ys[0] * Math.min(1.05, x / xs[0]);
+    const last = xs.length - 1;
+    if (x <= xs[last]) return ys[last] * (x / xs[last]);
+    let lo = 0, hi = last; // xs descending
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xs[mid] >= x) lo = mid; else hi = mid; }
+    const t = (xs[lo] - x) / Math.max(1e-9, xs[lo] - xs[hi]);
+    return ys[lo] + t * (ys[hi] - ys[lo]);
+  };
+  return g;
+}
+
+/**
+ * players: {pid: {n,pos,fp,team,age,exp,inj}}
+ * prod: {pid: {cur:{gp,pts}, prev:{gp,pts}}}
+ * market: {pid: value}  (superflex market, offense only, DynastyProcess scale)
+ * capital: {pid: {dr, do}} NFL draft round / overall
+ * Returns values on the flat display scale plus `scale` (raw → display map) for picks/rookies.
+ */
 export function computeValues({ players, prod, market, capital, league, teams, marketWeight = 0.65, idpWeight = 0.8, rostered = null }) {
   const rp = league.roster_positions;
   const pool = [];
@@ -117,52 +144,49 @@ export function computeValues({ players, prod, market, capital, league, teams, m
     pool.push({ pid, pos, ppg, age: p.age });
   }
   const { repl, starters } = replacementLevels(pool, rp, teams);
+  // Points over replacement with a soft taper below the line (no hard zero for depth players)
+  const soft = (ppg, r) => ppg >= r ? ppg - r + 1 : Math.exp((ppg - r) / Math.max(1, 0.2 * r));
   const raw = {};
+  for (const x of pool) raw[x.pid] = soft(x.ppg, repl[x.pos]) * 17 * dynastyMult(x.pos, x.age);
+  // Prospect floor from NFL draft capital for young players (all positions)
+  const p90 = {};
+  for (const g of GROUPS) { const a = pool.filter(x => x.pos === g).map(x => raw[x.pid]).sort((a, b) => b - a); p90[g] = a[Math.floor(a.length * 0.1)] || 0; }
   for (const x of pool) {
-    const vorp = Math.max(0, x.ppg - repl[x.pos]);
-    raw[x.pid] = vorp * 17 * dynastyMult(x.pos, x.age);
-  }
-  // IDP young-player floor from NFL draft capital (expressed in model units)
-  const idpRaws = pool.filter(x => IDP.includes(x.pos)).map(x => raw[x.pid]).filter(v => v > 0).sort((a, b) => b - a);
-  const p90 = idpRaws[Math.floor(idpRaws.length * 0.1)] || 0;
-  for (const x of pool) {
-    if (!IDP.includes(x.pos)) continue;
     const p = players[x.pid], c = capital?.[x.pid];
-    if (!c || (p.exp ?? 9) > 2) continue;
-    const f = c.do && c.do <= 12 ? 0.6 : c.dr === 1 ? 0.45 : c.dr === 2 ? 0.3 : c.dr === 3 ? 0.18 : c.dr ? 0.08 : 0;
-    raw[x.pid] = Math.max(raw[x.pid], f * p90);
+    if (!c || !c.dr || (p.exp ?? 9) > 2 || x.pos === 'K') continue;
+    const f = c.do && c.do <= 12 ? 0.6 : c.dr === 1 ? 0.45 : c.dr === 2 ? 0.3 : c.dr === 3 ? 0.18 : c.dr <= 5 ? 0.1 : 0.06;
+    raw[x.pid] = Math.max(raw[x.pid], f * p90[x.pos] * (1 - 0.25 * (p.exp || 0) / 2));
   }
   const fit = fitLogLog(pool.filter(x => OFF.includes(x.pos) && market[x.pid] > 300).map(x => [raw[x.pid], market[x.pid]]));
   const maxRaw = Math.max(1, ...Object.values(raw));
   const toScale = fit || (r => (r / maxRaw) * 9500);
-  // WIN-NOW baseline = what you can actually grab off waivers (avg of top-3 unrostered at the position, this season)
-  const curPPG = pid => (prod[pid]?.cur?.gp ? prod[pid].cur.pts / prod[pid].cur.gp : null);
-  const waiverRepl = {};
-  for (const pos of GROUPS) {
-    const fa = pool.filter(x => x.pos === pos && players[x.pid].team && (!rostered || !rostered.has(x.pid)) && (prod[x.pid]?.cur?.gp || 0) >= 3)
-      .map(x => curPPG(x.pid)).filter(v => v != null).sort((a, b) => b - a).slice(0, 3);
-    waiverRepl[pos] = fa.length ? fa.reduce((a, b) => a + b, 0) / fa.length : repl[pos] * 0.75;
-  }
-  const nowRawOf = x => { const c = curPPG(x.pid) ?? x.ppg; return Math.max(0, c - waiverRepl[x.pos]) * 17; };
-  // calibrate win-now raw onto the dynasty scale (match the top-100 medians)
-  const med = a => { const b = a.filter(v => v > 0).sort((p, q) => q - p).slice(0, 100); return b.length ? b[Math.floor(b.length / 2)] : 1; };
-  const calib = med(pool.map(x => raw[x.pid])) / Math.max(1, med(pool.map(nowRawOf)));
-  const values = {};
+  // 1) combine on the raw (DynastyProcess) scale
+  const rawVals = {};
   for (const x of pool) {
     const modelV = raw[x.pid] > 0 ? toScale(raw[x.pid]) : 0;
     const m = market[x.pid];
     let v = m ? marketWeight * m + (1 - marketWeight) * modelV : modelV;
-    if (x.pos === 'K') v = Math.min(v, 400);
-    if (IDP.includes(x.pos)) v *= idpWeight;
-    // WIN-NOW: current production over replacement, no age penalty (what he's worth to a contender this year)
-    const nowRaw = nowRawOf(x) * calib;
-    let now = nowRaw > 0 ? toScale(nowRaw) : 0;
-    if (x.pos === 'K') now = Math.min(now, 400);
-    if (IDP.includes(x.pos)) now *= idpWeight;
-    const shownModel = x.pos === 'K' ? Math.min(modelV, 400) : IDP.includes(x.pos) ? modelV * idpWeight : modelV;
-    values[x.pid] = { value: Math.round(v), dyn: Math.round(v), now: Math.round(now), ppg: Math.round(x.ppg * 10) / 10, model: Math.round(shownModel), market: m || null, pos: x.pos, games: (prod[x.pid]?.cur?.gp || 0) + (prod[x.pid]?.prev?.gp || 0) };
+    let mod = modelV;
+    if (x.pos === 'K') { v = Math.min(v, 400); mod = Math.min(mod, 400); }
+    if (IDP.includes(x.pos)) { v *= idpWeight; mod *= idpWeight; }
+    rawVals[x.pid] = { v, mod, m: m || null };
   }
-  return { values, repl, starters, waiverRepl };
+  // 2) remap onto the flat display scale by overall rank within the relevant universe:
+  //    rostered in this league + anyone with a market price + top IDP by model (keeps deep filler from diluting ranks)
+  const uni = new Set();
+  for (const x of pool) if ((rostered && rostered.has(x.pid)) || market[x.pid]) uni.add(x.pid);
+  for (const g0 of IDP) pool.filter(x => x.pos === g0).sort((a, b) => rawVals[b.pid].v - rawVals[a.pid].v).slice(0, 120).forEach(x => uni.add(x.pid));
+  const g = buildScaleMap([...uni].map(pid => rawVals[pid].v));
+  const values = {};
+  for (const x of pool) {
+    const r = rawVals[x.pid], v = Math.round(g(r.v));
+    values[x.pid] = {
+      value: v, dyn: v, now: v, ppg: Math.round(x.ppg * 10) / 10,
+      model: Math.round(g(r.mod)), market: r.m ? Math.round(g(r.m)) : null, pos: x.pos,
+      games: (prod[x.pid]?.cur?.gp || 0) + (prod[x.pid]?.prev?.gp || 0),
+    };
+  }
+  return { values, repl, starters, scale: g };
 }
 
 // ---------- picks ----------
@@ -291,7 +315,7 @@ export function mockDraft(picksInOrder, board, needs) {
 // ---------- trade ----------
 export function tradeSide(values) {
   const raw = values.reduce((a, b) => a + b, 0);
-  const adj = Math.pow(values.reduce((a, v) => a + Math.pow(Math.max(v, 0), 1.3), 0), 1 / 1.3);
+  const adj = Math.pow(values.reduce((a, v) => a + Math.pow(Math.max(v, 0), 1.5), 0), 1 / 1.5);
   return { raw: Math.round(raw), adj: Math.round(adj) };
 }
 export function tradeVerdict(a, b) {
@@ -437,4 +461,62 @@ export function findTrades({ me, rosters, players, val, picks, standingsRank, ta
     if (out.length >= limit) break;
   }
   return out;
+}
+
+// ---------- targeted acquisition ----------
+/**
+ * Build fair offers from `me` for each target asset.
+ * targets: [{kind:'p'|'k', id, owner, v, round?, label?}]  (v on the display scale)
+ */
+export function offersFor({ me, rosters, players, val, picks, standingsRank, targets, taxiMinRound = 2, limit = 15 }) {
+  const vo = {}; for (const k in val) vo[k] = { value: val[k] };
+  const V = pid => val[pid] || 0;
+  const tot = s => Object.values(s).reduce((a, b) => a + b, 0);
+  const str = pids => teamGroupStrength(pids, players, vo);
+  const R = Object.fromEntries(rosters.map(r => [r.roster_id, r]));
+  const n = rosters.length;
+  const mine = R[me].players || [];
+  const myBase = tot(str(mine));
+  const myPlayers = mine.filter(p => V(p) >= 100).sort((a, b) => V(b) - V(a)).slice(0, 22).map(pid => ({ kind: 'p', id: pid, v: V(pid) }));
+  const myPicks = picks.filter(p => p.owner === me && p.value >= 80).sort((a, b) => b.value - a.value).slice(0, 10).map(p => ({ kind: 'k', id: p.id, v: p.value, round: p.round, label: p.label }));
+  const pieces = [...myPlayers, ...myPicks];
+  const pkgs = [];
+  for (let i = 0; i < pieces.length; i++) {
+    pkgs.push([pieces[i]]);
+    for (let j = i + 1; j < pieces.length; j++) {
+      pkgs.push([pieces[i], pieces[j]]);
+      if (i < 14 && j < 14) for (let k = j + 1; k < 14; k++) pkgs.push([pieces[i], pieces[j], pieces[k]]);
+    }
+  }
+  const pkgSide = pkgs.map(pk => tradeSide(pk.map(x => x.v)).adj);
+  const out = [];
+  for (const t of targets) {
+    if (t.owner === me) continue;
+    const T = R[t.owner]; if (!T) continue;
+    const tv = tradeSide([t.v]).adj;
+    const theirBase = tot(str(T.players || []));
+    const rebuilding = standingsRank[t.owner] > n * 0.66;
+    const onTaxi = t.kind === 'p' && (T.taxi || []).includes(t.id);
+    let best = null;
+    for (let i = 0; i < pkgs.length; i++) {
+      const side = pkgSide[i];
+      if (side < tv * 0.97 || side > tv * 1.08) continue;
+      const pk = pkgs[i];
+      if (pk.some(x => x.kind === t.kind && x.id === t.id)) continue;
+      if (onTaxi && !pk.some(x => x.kind === 'k' && x.round <= taxiMinRound)) continue;
+      const outP = new Set(pk.filter(x => x.kind === 'p').map(x => x.id));
+      const myAfter = tot(str([...mine.filter(p => !outP.has(p)), ...(t.kind === 'p' ? [t.id] : [])]));
+      const myDelta = myAfter - myBase;
+      const theirAfter = tot(str([...(T.players || []).filter(p => p !== t.id), ...outP]));
+      let gainT = theirAfter - theirBase;
+      const pickV = pk.filter(x => x.kind === 'k').reduce((a, x) => a + x.v, 0);
+      gainT += pickV * (rebuilding ? 0.6 : 0.2);
+      if (gainT < -0.2 * tv) continue;
+      const score = myDelta + 0.4 * Math.min(Math.max(gainT, 0), tv) - 0.5 * (side - tv);
+      if (!best || score > best.score) best = { score, pk, side, myDelta, gainT };
+    }
+    if (best) out.push({ target: t, give: best.pk, giveAdj: Math.round(best.side), getAdj: Math.round(tv), myDelta: Math.round(best.myDelta), theirGain: Math.round(best.gainT), rebuilding, onTaxi, score: best.score, partner: t.owner });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out.slice(0, limit);
 }

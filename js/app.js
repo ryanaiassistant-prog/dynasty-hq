@@ -53,10 +53,10 @@ async function boot() {
     log('> computing league-specific dynasty values…');
     const prod = {};
     for (const pid in players) prod[pid] = { cur: cur[pid], prev: prev[pid] };
-    const { values, repl } = E.computeValues({
+    const { values, repl, scale } = E.computeValues({
       players, prod, market: market.market, capital: market.capital, league, teams: rosters.length, marketWeight: CONFIG.marketWeight, idpWeight: CONFIG.idpWeight, rostered: new Set(S.rostered.keys()),
     });
-    S.values = values; S.repl = repl;
+    S.values = values; S.repl = repl; S.scale = scale;
     trackValueDeltas(values);
 
     computePicksAndDraft(rookies);
@@ -85,7 +85,14 @@ function trackValueDeltas(values) {
 
 function computePicksAndDraft(rookieFile) {
   const L = S.league, teams = S.rosters.length;
-  const pm = E.pickValueModel(S.mk.pickRows || [], teams);
+  const pm0 = E.pickValueModel(S.mk.pickRows || [], teams);
+  // picks: equivalent-player value on the display scale, with a per-round floor so late picks never flatten out
+  const FLOOR = [0, 1400, 700, 400, 250, 170, 120];
+  const floorOf = (round, slot) => (FLOOR[round] ?? 80) * (1 - 0.025 * ((slot ?? Math.ceil(teams / 2)) - 1));
+  const pm = {
+    slotValue: n => { const rd = Math.ceil(n / teams), sl = n - (rd - 1) * teams; return Math.round(Math.max(S.scale(pm0.slotValue(n)), floorOf(rd, sl))); },
+    genericVal: (y, r) => Math.round(Math.max(S.scale(pm0.genericVal(y, r)), floorOf(r))),
+  };
   const preDraft = ['pre_draft', 'drafting'].includes(L.status);
   const draftSeason = preDraft ? Number(L.season) : Number(L.season) + 1;
   const seasons = [draftSeason, draftSeason + 1, draftSeason + 2];
@@ -164,7 +171,7 @@ function delta(pid) {
 }
 const MKT = pid => S.values[pid]?.market;
 const MOD = pid => S.values[pid]?.model;
-const EDGE = pid => { const m = MKT(pid), d = MOD(pid), g = S.values[pid]?.games || 0; return m && m >= 300 && g >= 6 ? d / m - 1 : null; };
+const EDGE = pid => { const m = MKT(pid), d = MOD(pid), g = S.values[pid]?.games || 0; return m && m >= 700 && g >= 6 ? d / m - 1 : null; };
 const edgeHtml = pid => { const e = EDGE(pid); if (e == null) return '<span class="dim">–</span>'; const pct = Math.round(e * 100);
   return `<span class="${pct >= 15 ? 'up' : pct <= -15 ? 'dn' : 'dim'}">${pct > 0 ? '+' : ''}${pct}%</span>`; };
 const mm = pid => `<span class="dim" style="font-size:10px">mkt ${MKT(pid) ? fmt(MKT(pid)) : '–'} · model ${fmt(MOD(pid))}</span> <span style="font-size:10px">${EDGE(pid) == null ? '' : edgeHtml(pid)}</span>`;
@@ -238,9 +245,10 @@ function assetsOf(rid) {
 }
 function renderTrade() {
   const sub = S.ui.tradeSub || 'find';
-  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'edges' ? 'on' : ''}" data-tsub="edges">MARKET EDGES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button></div>`;
+  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'acq' ? 'on' : ''}" data-tsub="acq">ACQUIRE</button><button class="chip ${sub === 'edges' ? 'on' : ''}" data-tsub="edges">MARKET EDGES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button></div>`;
   if (sub === 'find') { view.innerHTML = subnav + renderFinder(); return; }
   if (sub === 'edges') { view.innerHTML = subnav + renderEdges(); return; }
+  if (sub === 'acq') { view.innerHTML = subnav + renderAcquire(); return; }
   const T = (S.ui.trade ||= { a: S.myRid, b: S.rosters.find(r => r.roster_id !== S.myRid).roster_id, sa: [], sb: [], qa: '', qb: '' });
   const A = assetsOf(T.a), B = assetsOf(T.b);
   const pickA = A.filter(x => T.sa.includes(x.id)), pickB = B.filter(x => T.sb.includes(x.id));
@@ -311,7 +319,7 @@ function renderFinder() {
 function renderEdges() {
   const me = S.myRid;
   const owner = pid => S.rostered.get(pid);
-  const rows = Object.keys(S.values).filter(pid => EDGE(pid) != null && MKT(pid) >= 500 && S.players[pid]?.team);
+  const rows = Object.keys(S.values).filter(pid => EDGE(pid) != null && S.players[pid]?.team);
   const diff = pid => MOD(pid) - MKT(pid);
   const buy = rows.filter(pid => owner(pid) && owner(pid) !== me && EDGE(pid) >= 0.15).sort((a, b) => diff(b) - diff(a)).slice(0, 25);
   const sell = rows.filter(pid => owner(pid) === me && EDGE(pid) <= -0.15).sort((a, b) => diff(a) - diff(b)).slice(0, 15);
@@ -324,6 +332,48 @@ function renderEdges() {
     <h2>SELL CANDIDATES <small>on your roster · market values them ≥15% above your scoring</small></h2>${tbl(sell, false)}
     <h2>FREE-AGENT EDGES <small>unrostered and undervalued by the market</small></h2>${tbl(fa, false)}
     <p class="note">IDP has no market price, so it isn't listed here. Every IDP value is model-only, which is already an edge over owners using generic rankings.</p>`;
+}
+
+function renderAcquire() {
+  const A = (S.ui.acq ||= { kind: 'pos', pos: 'WR', tier: 'STARTER', season: S.draft.draftSeason, round: 1 });
+  const me = S.myRid;
+  const chips = (list, key, cur) => list.map(([v, l]) => `<button class="chip ${String(cur) === String(v) ? 'on' : ''}" data-acq="${key}:${v}">${l}</button>`).join('');
+  let h = `<p class="note">Pick what you want. For every matching asset on another roster, it builds the fairest offer from your team that costs your starting lineup the least.</p>
+    <div class="chips">${chips([['pos', 'PLAYER'], ['pick', 'DRAFT PICK']], 'kind', A.kind)}</div>`;
+  let targets = [];
+  if (A.kind === 'pos') {
+    h += `<div class="chips">${chips(['QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB'].map(p => [p, p]), 'pos', A.pos)}</div>
+      <div class="chips">${chips([['ELITE', 'ELITE (top 12)'], ['STARTER', 'STARTER (13–36)'], ['DEPTH', 'DEPTH / UPSIDE (37+)'], ['ANY', 'ANY']], 'tier', A.tier)}</div>`;
+    const ranked = Object.keys(S.values).filter(pid => S.values[pid].pos === A.pos && S.players[pid]?.team).sort((a, b) => V(b) - V(a));
+    const lim = A.pos === 'QB' || A.pos === 'TE' ? [6, 24] : [12, 36];
+    const rng = { ELITE: [0, lim[0]], STARTER: [lim[0], lim[1]], DEPTH: [lim[1], lim[1] + 40], ANY: [0, 80] }[A.tier];
+    targets = ranked.slice(rng[0], rng[1]).filter(pid => S.rostered.get(pid) && S.rostered.get(pid) !== me)
+      .map(pid => ({ kind: 'p', id: pid, owner: S.rostered.get(pid), v: V(pid) }));
+  } else {
+    h += `<div class="chips">${chips(S.draft.seasons.map(y => [y, y]), 'season', A.season)}</div>
+      <div class="chips">${chips(Array.from({ length: S.draft.rounds }, (_, i) => [i + 1, 'RD ' + (i + 1)]), 'round', A.round)}</div>`;
+    targets = S.picks.filter(p => p.season === Number(A.season) && p.round === Number(A.round) && p.owner !== me)
+      .map(p => ({ kind: 'k', id: p.id, owner: p.owner, v: p.value, round: p.round, label: p.label }));
+  }
+  const key = JSON.stringify([A, me]);
+  if (!S.acqCache || S.acqCache.key !== key) {
+    const val = {}; for (const k in S.values) val[k] = V(k);
+    const rank = {}; E.standings(S.rosters).forEach((s, i) => (rank[s.rid] = i + 1));
+    S.acqCache = { key, list: E.offersFor({ me, rosters: S.rosters, players: S.players, val, picks: S.picks, standingsRank: rank, targets, taxiMinRound: CONFIG.houseRules.taxiStealMinRound }) };
+  }
+  const list = S.acqCache.list;
+  if (!targets.length) return h + '<div class="banner">No one else owns an asset like that right now.</div>';
+  if (!list.length) return h + `<div class="banner">${targets.length} matching assets, but no fair package from your roster (within 8% on value). Try a different tier, or add a pick in the calculator.</div>`;
+  const label = x => x.kind === 'p' ? `${posTag(pos(x.id))} ${esc(P(x.id).n)} <span class="dim">${fmt(x.v)}</span>` : `<span class="pos">PK</span> ${esc(x.label)} <span class="dim">${fmt(x.v)}</span>`;
+  list.forEach((r, i) => {
+    const t = r.target;
+    const tgt = t.kind === 'p' ? `${posTag(pos(t.id))} <b class="hi">${esc(P(t.id).n)}</b> <span class="dim">${P(t.id).team || ''} · ${age(t.id)}</span> · ${fmt(t.v)}<br>${mm(t.id)}` : `<span class="pos">PK</span> <b class="hi">${esc(t.label)}</b> <span class="dim">(${esc(teamName(S.picks.find(p => p.id === t.id)?.orig))}'s)</span> · ${fmt(t.v)}`;
+    h += `<div class="panel"><div class="row"><span class="dim">#${i + 1}</span><b class="hi grow">${esc(teamName(r.partner))}</b>${r.rebuilding ? '<span class="tag">REBUILDING</span>' : ''}${r.onTaxi ? '<span class="tag taxi">TAXI STEAL</span>' : ''}</div>
+      <div class="cols" style="margin-top:6px"><div><div class="dim">YOU GET</div><div>${tgt}</div></div><div><div class="dim">YOU GIVE · ${fmt(r.giveAdj)}</div><div>${r.give.map(label).join('<br>')}</div></div></div>
+      <div class="note">Your starting lineup: <span class="${r.myDelta >= 0 ? 'up' : 'dn'}">${r.myDelta >= 0 ? '+' : ''}${fmt(r.myDelta)}</span> · their side: <span class="${r.theirGain >= 0 ? 'up' : 'dn'}">${r.theirGain >= 0 ? '+' : ''}${fmt(r.theirGain)}</span>${r.rebuilding ? ' (rebuilder, picks weighted up)' : ''}</div>
+      <button class="btn" data-loadacq="${i}" style="margin-top:6px">Open in calculator →</button></div>`;
+  });
+  return h;
 }
 
 // ---- DRAFT ----
@@ -427,9 +477,14 @@ function renderWaivers() {
 
 // ---------------- events ----------------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-tsub],[data-loadtrade],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
+  const t = e.target.closest('[data-acq],[data-loadacq],[data-tsub],[data-loadtrade],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
   if (!t) return;
-  if (t.dataset.tsub) { S.ui.tradeSub = t.dataset.tsub; render(); }
+  if (t.dataset.acq) { const [k, v] = t.dataset.acq.split(':'); S.ui.acq[k] = v; render(); }
+  else if (t.dataset.loadacq) {
+    const r = S.acqCache.list[+t.dataset.loadacq];
+    S.ui.trade = { a: S.myRid, b: r.partner, sa: r.give.map(x => x.id), sb: [r.target.id], qa: '', qb: '' }; S.ui.tradeSub = 'calc'; render(); window.scrollTo(0, 0);
+  }
+  else if (t.dataset.tsub) { S.ui.tradeSub = t.dataset.tsub; render(); }
   else if (t.dataset.loadtrade) {
     const r = S.finderCache.list[+t.dataset.loadtrade], me = S.ui.finderRid ?? S.myRid;
     S.ui.trade = { a: me, b: r.partner, sa: r.give.map(x => x.id), sb: [r.get], qa: '', qb: '' }; S.ui.tradeSub = 'calc'; render(); window.scrollTo(0, 0);
