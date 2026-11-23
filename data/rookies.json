@@ -1,0 +1,675 @@
+{
+ "draftSeason": 2027,
+ "updated": "2026-11-22",
+ "note": "Pre-NFL-draft board. Offense = DraftSharks 2027 superflex dynasty rookie ranks; IDP = PFF 2027 NFL big board ranks (Chris Cole slotted ~10 per PFF). After the NFL Draft the app switches to live DynastyProcess rookie values automatically. Reorder freely to use your own board.",
+ "offense": [
+  {
+   "rank": 1,
+   "name": "Jeremiah Smith",
+   "school": "Ohio State",
+   "pos": "WR"
+  },
+  {
+   "rank": 2,
+   "name": "Charlie Becker",
+   "school": "Indiana",
+   "pos": "WR"
+  },
+  {
+   "rank": 3,
+   "name": "Drew Mestemaker",
+   "school": "Oklahoma State",
+   "pos": "QB"
+  },
+  {
+   "rank": 4,
+   "name": "Jadan Baugh",
+   "school": "Florida",
+   "pos": "RB"
+  },
+  {
+   "rank": 5,
+   "name": "Darian Mensah",
+   "school": "Miami",
+   "pos": "QB"
+  },
+  {
+   "rank": 6,
+   "name": "Cam Coleman",
+   "school": "Texas",
+   "pos": "WR"
+  },
+  {
+   "rank": 7,
+   "name": "KJ Duff",
+   "school": "Rutgers",
+   "pos": "WR"
+  },
+  {
+   "rank": 8,
+   "name": "Nick Marsh",
+   "school": "Indiana",
+   "pos": "WR"
+  },
+  {
+   "rank": 9,
+   "name": "Kewan Lacy",
+   "school": "Ole Miss",
+   "pos": "RB"
+  },
+  {
+   "rank": 10,
+   "name": "Dante Moore",
+   "school": "Oregon",
+   "pos": "QB"
+  },
+  {
+   "rank": 11,
+   "name": "Trinidad Chambliss",
+   "school": "Ole Miss",
+   "pos": "QB"
+  },
+  {
+   "rank": 12,
+   "name": "Jamari Johnson",
+   "school": "Oregon",
+   "pos": "TE"
+  },
+  {
+   "rank": 13,
+   "name": "Trey'Dez Green",
+   "school": "LSU",
+   "pos": "TE"
+  },
+  {
+   "rank": 14,
+   "name": "Reed Harris",
+   "school": "Arizona State",
+   "pos": "WR"
+  },
+  {
+   "rank": 15,
+   "name": "Jackson Harris",
+   "school": "LSU",
+   "pos": "WR"
+  },
+  {
+   "rank": 16,
+   "name": "Deuce Alexander",
+   "school": "Ole Miss",
+   "pos": "WR"
+  },
+  {
+   "rank": 17,
+   "name": "Duce Robinson",
+   "school": "Florida State",
+   "pos": "WR"
+  },
+  {
+   "rank": 18,
+   "name": "Ahmad Hardy",
+   "school": "Missouri",
+   "pos": "RB"
+  },
+  {
+   "rank": 19,
+   "name": "Mark Fletcher",
+   "school": "Miami",
+   "pos": "RB"
+  },
+  {
+   "rank": 20,
+   "name": "CJ Carr",
+   "school": "Notre Dame",
+   "pos": "QB"
+  },
+  {
+   "rank": 21,
+   "name": "Jamal Roberts",
+   "school": "Missouri",
+   "pos": "RB"
+  },
+  {
+   "rank": 22,
+   "name": "Ryan Coleman-Williams",
+   "school": "Alabama",
+   "pos": "WR"
+  },
+  {
+   "rank": 23,
+   "name": "Ryan Wingo",
+   "school": "Texas",
+   "pos": "WR"
+  },
+  {
+   "rank": 24,
+   "name": "Dylan Riley",
+   "school": "Boise State",
+   "pos": "RB"
+  },
+  {
+   "rank": 25,
+   "name": "Austin Simmons",
+   "school": "Missouri",
+   "pos": "QB"
+  },
+  {
+   "rank": 26,
+   "name": "Isaac Brown",
+   "school": "Louisville",
+   "pos": "RB"
+  },
+  {
+   "rank": 27,
+   "name": "Isaiah Sategna III",
+   "school": "Oklahoma",
+   "pos": "WR"
+  },
+  {
+   "rank": 28,
+   "name": "DJ Vonnahme",
+   "school": "Iowa",
+   "pos": "TE"
+  },
+  {
+   "rank": 29,
+   "name": "Arch Manning",
+   "school": "Texas",
+   "pos": "QB"
+  },
+  {
+   "rank": 30,
+   "name": "LaNorris Sellers",
+   "school": "South Carolina",
+   "pos": "QB"
+  },
+  {
+   "rank": 31,
+   "name": "Bryant Wesco",
+   "school": "Clemson",
+   "pos": "WR"
+  },
+  {
+   "rank": 32,
+   "name": "Antwan Raymond",
+   "school": "Rutgers",
+   "pos": "RB"
+  },
+  {
+   "rank": 33,
+   "name": "LJ Martin",
+   "school": "BYU",
+   "pos": "RB"
+  },
+  {
+   "rank": 34,
+   "name": "Wyatt Young",
+   "school": "Oklahoma State",
+   "pos": "WR"
+  },
+  {
+   "rank": 35,
+   "name": "Mario Craver",
+   "school": "Texas A&M",
+   "pos": "WR"
+  },
+  {
+   "rank": 36,
+   "name": "Luke Reynolds",
+   "school": "Virginia Tech",
+   "pos": "TE"
+  },
+  {
+   "rank": 37,
+   "name": "Cameron Dickey",
+   "school": "Texas Tech",
+   "pos": "RB"
+  },
+  {
+   "rank": 38,
+   "name": "Jayden Maiava",
+   "school": "USC",
+   "pos": "QB"
+  },
+  {
+   "rank": 39,
+   "name": "Omarion Miller",
+   "school": "Arizona State",
+   "pos": "WR"
+  },
+  {
+   "rank": 40,
+   "name": "Raleek Brown",
+   "school": "Texas",
+   "pos": "RB"
+  },
+  {
+   "rank": 41,
+   "name": "Terrance Carter",
+   "school": "Texas Tech",
+   "pos": "TE"
+  },
+  {
+   "rank": 42,
+   "name": "Nate Frazier",
+   "school": "Georgia",
+   "pos": "RB"
+  },
+  {
+   "rank": 43,
+   "name": "Connor Weigman",
+   "school": "Houston",
+   "pos": "QB"
+  },
+  {
+   "rank": 44,
+   "name": "TJ Moore",
+   "school": "Clemson",
+   "pos": "WR"
+  },
+  {
+   "rank": 45,
+   "name": "Amare Thomas",
+   "school": "Houston",
+   "pos": "WR"
+  },
+  {
+   "rank": 46,
+   "name": "Cam Cook",
+   "school": "West Virginia",
+   "pos": "RB"
+  },
+  {
+   "rank": 47,
+   "name": "Wayne Knight",
+   "school": "UCLA",
+   "pos": "RB"
+  },
+  {
+   "rank": 48,
+   "name": "Waymond Jordan",
+   "school": "USC",
+   "pos": "RB"
+  },
+  {
+   "rank": 49,
+   "name": "Brendan Sorsby",
+   "school": "Texas Tech",
+   "pos": "QB"
+  },
+  {
+   "rank": 50,
+   "name": "DeSean Bishop",
+   "school": "Tennessee",
+   "pos": "RB"
+  },
+  {
+   "rank": 51,
+   "name": "Junior Sherrill",
+   "school": "Vanderbilt",
+   "pos": "WR"
+  },
+  {
+   "rank": 52,
+   "name": "Julian Sayin",
+   "school": "Ohio State",
+   "pos": "QB"
+  },
+  {
+   "rank": 53,
+   "name": "Nyck Harbor",
+   "school": "South Carolina",
+   "pos": "WR"
+  },
+  {
+   "rank": 54,
+   "name": "Rocky Beers",
+   "school": "Oklahoma",
+   "pos": "TE"
+  },
+  {
+   "rank": 55,
+   "name": "Hollywood Smothers",
+   "school": "Texas",
+   "pos": "RB"
+  },
+  {
+   "rank": 56,
+   "name": "Mike Matthews",
+   "school": "Tennessee",
+   "pos": "WR"
+  },
+  {
+   "rank": 57,
+   "name": "Chris Marshall",
+   "school": "Arkansas",
+   "pos": "WR"
+  },
+  {
+   "rank": 58,
+   "name": "Justice Haynes",
+   "school": "Georgia Tech",
+   "pos": "RB"
+  },
+  {
+   "rank": 59,
+   "name": "Beau Sparks",
+   "school": "Texas State",
+   "pos": "WR"
+  },
+  {
+   "rank": 60,
+   "name": "Justin Bowick",
+   "school": "Oklahoma State",
+   "pos": "WR"
+  },
+  {
+   "rank": 61,
+   "name": "Fluff Bothwell",
+   "school": "Mississippi State",
+   "pos": "RB"
+  },
+  {
+   "rank": 62,
+   "name": "Benjamin Brahmer",
+   "school": "Penn State",
+   "pos": "TE"
+  },
+  {
+   "rank": 63,
+   "name": "Cooper Barkate",
+   "school": "Miami",
+   "pos": "WR"
+  },
+  {
+   "rank": 64,
+   "name": "CJ Bailey",
+   "school": "NC State",
+   "pos": "QB"
+  },
+  {
+   "rank": 65,
+   "name": "CJ Baxter",
+   "school": "Kentucky",
+   "pos": "RB"
+  },
+  {
+   "rank": 66,
+   "name": "Kamari Moulton",
+   "school": "Iowa",
+   "pos": "RB"
+  },
+  {
+   "rank": 67,
+   "name": "Sam Leavitt",
+   "school": "LSU",
+   "pos": "QB"
+  },
+  {
+   "rank": 68,
+   "name": "Easton Messer",
+   "school": "FIU",
+   "pos": "WR"
+  },
+  {
+   "rank": 69,
+   "name": "Giovanni Lopez",
+   "school": "Wake Forest",
+   "pos": "QB"
+  },
+  {
+   "rank": 70,
+   "name": "Micahi Danzy",
+   "school": "Florida State",
+   "pos": "WR"
+  },
+  {
+   "rank": 71,
+   "name": "Jahiem White",
+   "school": "North Texas",
+   "pos": "RB"
+  },
+  {
+   "rank": 72,
+   "name": "Braylon Staley",
+   "school": "Tennessee",
+   "pos": "WR"
+  },
+  {
+   "rank": 73,
+   "name": "Dorian Thomas",
+   "school": "Cal",
+   "pos": "TE"
+  },
+  {
+   "rank": 74,
+   "name": "Keyjuan Brown",
+   "school": "Louisville",
+   "pos": "RB"
+  },
+  {
+   "rank": 75,
+   "name": "Kenny Johnson",
+   "school": "Texas Tech",
+   "pos": "WR"
+  }
+ ],
+ "idp": [
+  {
+   "rank": 4,
+   "name": "Colin Simmons",
+   "pos": "ED",
+   "school": "Texas"
+  },
+  {
+   "rank": 5,
+   "name": "Leonard Moore",
+   "pos": "CB",
+   "school": "Notre Dame"
+  },
+  {
+   "rank": 7,
+   "name": "Dylan Stewart",
+   "pos": "ED",
+   "school": "South Carolina"
+  },
+  {
+   "rank": 9,
+   "name": "David Stone",
+   "pos": "DI",
+   "school": "Oklahoma"
+  },
+  {
+   "rank": 10,
+   "name": "Chris Cole",
+   "pos": "LB",
+   "school": "Georgia"
+  },
+  {
+   "rank": 11,
+   "name": "Ellis Robinson IV",
+   "pos": "CB",
+   "school": "Georgia"
+  },
+  {
+   "rank": 13,
+   "name": "A.J. Holmes Jr.",
+   "pos": "DI",
+   "school": "Texas Tech"
+  },
+  {
+   "rank": 16,
+   "name": "KJ Bolden",
+   "pos": "S",
+   "school": "Georgia"
+  },
+  {
+   "rank": 17,
+   "name": "Matayo Uiagalelei",
+   "pos": "ED",
+   "school": "Oregon"
+  },
+  {
+   "rank": 20,
+   "name": "Kelley Jones",
+   "pos": "CB",
+   "school": "Mississippi State"
+  },
+  {
+   "rank": 22,
+   "name": "Kyngstonn Viliamu-Asa",
+   "pos": "LB",
+   "school": "Notre Dame"
+  },
+  {
+   "rank": 23,
+   "name": "A'Mauri Washington",
+   "pos": "DI",
+   "school": "Oregon"
+  },
+  {
+   "rank": 24,
+   "name": "Jackson Bennee",
+   "pos": "CB",
+   "school": "Utah"
+  },
+  {
+   "rank": 25,
+   "name": "Damon Wilson II",
+   "pos": "ED",
+   "school": "Miami"
+  },
+  {
+   "rank": 27,
+   "name": "John Henry Daley",
+   "pos": "ED",
+   "school": "Michigan"
+  },
+  {
+   "rank": 32,
+   "name": "Will Echoles",
+   "pos": "DI",
+   "school": "Ole Miss"
+  },
+  {
+   "rank": 33,
+   "name": "Rasheem Biles",
+   "pos": "LB",
+   "school": "Texas"
+  },
+  {
+   "rank": 36,
+   "name": "Jamari Sharpe",
+   "pos": "CB",
+   "school": "Indiana"
+  },
+  {
+   "rank": 39,
+   "name": "Ty Benefield",
+   "pos": "S",
+   "school": "LSU"
+  },
+  {
+   "rank": 41,
+   "name": "Zabien Brown",
+   "pos": "CB",
+   "school": "Alabama"
+  },
+  {
+   "rank": 43,
+   "name": "Anthony Smith",
+   "pos": "DI",
+   "school": "Minnesota"
+  },
+  {
+   "rank": 46,
+   "name": "Ashton Hampton",
+   "pos": "CB",
+   "school": "Clemson"
+  },
+  {
+   "rank": 47,
+   "name": "Clev Lubin",
+   "pos": "ED",
+   "school": "Louisville"
+  },
+  {
+   "rank": 48,
+   "name": "Bray Hubbard",
+   "pos": "S",
+   "school": "Alabama"
+  },
+  {
+   "rank": 49,
+   "name": "Ben Roberts",
+   "pos": "LB",
+   "school": "Texas Tech"
+  },
+  {
+   "rank": 55,
+   "name": "Ahmad Moten Sr.",
+   "pos": "DI",
+   "school": "Miami"
+  },
+  {
+   "rank": 56,
+   "name": "Brice Pollock",
+   "pos": "CB",
+   "school": "Texas Tech"
+  },
+  {
+   "rank": 57,
+   "name": "Ezra Christensen",
+   "pos": "DI",
+   "school": "Colorado"
+  },
+  {
+   "rank": 60,
+   "name": "Corey Myrick",
+   "pos": "S",
+   "school": "Clemson"
+  },
+  {
+   "rank": 61,
+   "name": "Adam Trick",
+   "pos": "ED",
+   "school": "Texas Tech"
+  },
+  {
+   "rank": 66,
+   "name": "Chris Peal",
+   "pos": "CB",
+   "school": "Syracuse"
+  },
+  {
+   "rank": 68,
+   "name": "Adon Shuler",
+   "pos": "S",
+   "school": "Notre Dame"
+  },
+  {
+   "rank": 71,
+   "name": "Christian Gray",
+   "pos": "CB",
+   "school": "Notre Dame"
+  },
+  {
+   "rank": 72,
+   "name": "Tony Rojas",
+   "pos": "LB",
+   "school": "Penn State"
+  },
+  {
+   "rank": 74,
+   "name": "Teitum Tuioti",
+   "pos": "ED",
+   "school": "Oregon"
+  },
+  {
+   "rank": 75,
+   "name": "Jordan Ross",
+   "pos": "ED",
+   "school": "LSU"
+  }
+ ]
+}
