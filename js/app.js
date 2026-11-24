@@ -130,9 +130,16 @@ function computePicksAndDraft(rookieFile) {
 async function loadWeekly() {
   const st = S.state, L = S.league, season = Number(L.season);
   const inSeason = st.season_type === 'regular' && Number(st.season) === season;
-  const week = inSeason ? st.week : null;
+  // Sleeper's week flips mid-week; roll forward ourselves once the week's last game is ~6h in the past.
+  let week = inSeason ? st.week : null;
+  if (week) {
+    const kicks = S.games.filter(g => g.w === week).map(g => etDate(g.kickoff)).filter(Boolean);
+    const last = kicks.length ? Math.max(...kicks) : null;
+    if (last && Date.now() > last + 9 * 3600e3 && S.games.some(g => g.w === week + 1)) week += 1;
+  }
   S.week = week;
   S.proj = {}; S.recent = {};
+  render();
   if (!week) { S.weeklyReady = true; if (['lineup', 'waivers'].includes(S.tab)) render(); return; }
   const sc = L.scoring_settings, lid = L.league_id;
   const back = [week - 1, week - 2, week - 3].filter(w => w >= 1);
@@ -151,6 +158,14 @@ async function loadWeekly() {
 }
 
 // ---------------- helpers ----------------
+function etDate(k) { // 'YYYY-MM-DDTHH:MM' in US Eastern → ms
+  if (!k) return null;
+  const [d, t] = k.split('T'); const [y, m, dd] = d.split('-').map(Number);
+  const nthSun = (mo, n) => { const f = new Date(Date.UTC(y, mo, 1)).getUTCDay(); return 1 + ((7 - f) % 7) + 7 * (n - 1); };
+  const md = m * 100 + dd, dstStart = 300 + nthSun(2, 2), dstEnd = 1100 + nthSun(10, 1);
+  const off = md >= dstStart && md < dstEnd ? '-04:00' : '-05:00';
+  const ms = Date.parse(`${d}T${t || '13:00'}:00${off}`); return isNaN(ms) ? null : ms;
+}
 const P = pid => S.players[pid] || { n: `#${pid}`, pos: '?', fp: [] };
 const V = pid => S.values[pid]?.[S.mode] || 0;
 const pos = pid => E.primaryPos(P(pid));
@@ -200,7 +215,7 @@ function render() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   if (!S.loaded) return;
   const L = S.league, st = S.state;
-  $('#meta').innerHTML = `${esc(L.name)}<br>${L.season} · ${st.season_type === 'regular' ? 'WK ' + st.week : st.season_type}`;
+  $('#meta').innerHTML = `${esc(L.name)}<br>${L.season} · ${st.season_type === 'regular' ? 'WK ' + (S.week || st.week) : st.season_type}`;
   $('#foot').innerHTML = `Live: Sleeper API (rosters, picks, stats, projections) · Market: <a href="https://github.com/dynastyprocess/data" target="_blank">DynastyProcess</a> superflex values blended ${Math.round(CONFIG.marketWeight * 100)}/${100 - Math.round(CONFIG.marketWeight * 100)} with a model built on your league's scoring (IDP = model only) · Schedule & Vegas lines: nflverse · Rookies: ${esc(S.boardSource)}<br><button class="btn ghost" id="refresh">↻ force refresh</button>`;
   ({ teams: renderTeams, trade: renderTrade, draft: renderDraft, lineup: renderLineup, waivers: renderWaivers })[S.tab]();
 }
