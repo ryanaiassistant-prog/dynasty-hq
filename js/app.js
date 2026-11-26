@@ -105,6 +105,7 @@ function computePicksAndDraft(rookieFile) {
   const own = E.pickOwnership(S.rosters, S.traded, seasons, rounds);
   S.picks = E.valuePicks(own, { draftSeason, order, teams, certainty, pm });
   S.draft = { draftSeason, rounds, order, official, certainty, seasons };
+  S.pm = pm;
 
   // Rookie board: live NFL-drafted class from DynastyProcess when it exists, else seeded pre-draft board.
   const cls = (S.mk.classRows || []).filter(r => r.dy === draftSeason);
@@ -222,6 +223,40 @@ function render() {
 
 // ---- TEAMS ----
 function renderTeams() {
+  const sub = S.ui.teamsSub || 'power';
+  const nav = `<div class="chips" style="margin-bottom:6px"><button class="chip ${sub === 'power' ? 'on' : ''}" data-teamsub="power">POWER RANKINGS</button><button class="chip ${sub === 'board' ? 'on' : ''}" data-teamsub="board">BOARD (TOP 150)</button></div>`;
+  if (sub === 'board') { view.innerHTML = nav + renderBoard(); return; }
+  renderPower(); view.innerHTML = nav + view.innerHTML;
+}
+function renderBoard() {
+  const f = S.ui.boardF || 'ALL';
+  const items = [];
+  for (const pid in S.values) {
+    const p = S.players[pid]; if (!p || !p.team) continue;
+    const g = pos(pid);
+    if (f === 'PICKS') continue;
+    if (f === 'OFF' && !E.OFF.includes(g)) continue;
+    if (f === 'IDP' && !E.IDP.includes(g)) continue;
+    if (!['ALL', 'OFF', 'IDP'].includes(f) && g !== f) continue;
+    items.push({ kind: 'p', id: pid, v: V(pid) });
+  }
+  if (f === 'ALL' || f === 'PICKS') for (const pk of S.picks.filter(p => p.season === S.draft.draftSeason)) items.push({ kind: 'k', id: pk.id, v: pk.value, pk });
+  items.sort((a, b) => b.v - a.v);
+  const top = items.slice(0, 150);
+  let h = `<div class="chips">${['ALL', 'OFF', 'IDP', 'PICKS', ...E.GROUPS.filter(g => g !== 'K')].map(x => `<button class="chip ${f === x ? 'on' : ''}" data-boardf="${x}">${x}</button>`).join('')}</div>
+    <p class="note">Every player and ${S.draft.draftSeason} pick on one scale. Scan it like a recruiting board and flag anyone who's clearly too high or low.</p>
+    <div class="tw"><table><thead><tr><th>#</th><th></th><th>PLAYER</th><th>OWNER</th><th class="num">AGE</th><th class="num">VALUE</th><th class="num">MKT</th><th class="num">MODEL</th><th class="num">EDGE</th></tr></thead><tbody>`;
+  top.forEach((x, i) => {
+    if (x.kind === 'k') {
+      h += `<tr class="${x.pk.owner === S.myRid ? 'me' : ''}"><td class="dim">${i + 1}</td><td><span class="pos">PK</span></td><td class="hi">${esc(x.pk.label)}${x.pk.orig !== x.pk.owner ? ` <span class="dim">(${esc(teamName(x.pk.orig))}'s)</span>` : ''}</td><td class="dim">${esc(teamName(x.pk.owner))}</td><td></td><td class="num hi">${fmt(x.v)}</td><td></td><td></td><td></td></tr>`;
+    } else {
+      const o = S.rostered.get(x.id);
+      h += `<tr class="${o === S.myRid ? 'me' : ''}"><td class="dim">${i + 1}</td><td>${posTag(pos(x.id))}</td><td class="hi">${esc(P(x.id).n)} <span class="dim">${P(x.id).team}</span></td><td class="dim">${o ? esc(teamName(o)) : '<span class="up">FA</span>'}</td><td class="num">${age(x.id)}</td><td class="num hi">${fmt(x.v)}</td><td class="num dim">${MKT(x.id) ? fmt(MKT(x.id)) : '–'}</td><td class="num dim">${fmt(MOD(x.id))}</td><td class="num">${edgeHtml(x.id)}</td></tr>`;
+    }
+  });
+  return h + '</tbody></table></div>';
+}
+function renderPower() {
   const sum = S.rosters.map(r => teamSummary(r.roster_id));
   const sortKey = S.ui.teamSort || 'total';
   sum.sort((a, b) => sortKey === 'age' ? (a.age || 99) - (b.age || 99) : b[sortKey] - a[sortKey]);
@@ -260,10 +295,11 @@ function assetsOf(rid) {
 }
 function renderTrade() {
   const sub = S.ui.tradeSub || 'find';
-  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'acq' ? 'on' : ''}" data-tsub="acq">ACQUIRE</button><button class="chip ${sub === 'edges' ? 'on' : ''}" data-tsub="edges">MARKET EDGES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button></div>`;
+  const subnav = `<div class="chips" style="margin-bottom:10px"><button class="chip ${sub === 'find' ? 'on' : ''}" data-tsub="find">RECOMMENDED TRADES</button><button class="chip ${sub === 'acq' ? 'on' : ''}" data-tsub="acq">ACQUIRE</button><button class="chip ${sub === 'edges' ? 'on' : ''}" data-tsub="edges">MARKET EDGES</button><button class="chip ${sub === 'calc' ? 'on' : ''}" data-tsub="calc">CALCULATOR</button><button class="chip ${sub === 'hist' ? 'on' : ''}" data-tsub="hist">LEAGUE TRADES</button></div>`;
   if (sub === 'find') { view.innerHTML = subnav + renderFinder(); return; }
   if (sub === 'edges') { view.innerHTML = subnav + renderEdges(); return; }
   if (sub === 'acq') { view.innerHTML = subnav + renderAcquire(); return; }
+  if (sub === 'hist') { view.innerHTML = subnav + renderHistory(); return; }
   const T = (S.ui.trade ||= { a: S.myRid, b: S.rosters.find(r => r.roster_id !== S.myRid).roster_id, sa: [], sb: [], qa: '', qb: '' });
   const A = assetsOf(T.a), B = assetsOf(T.b);
   const pickA = A.filter(x => T.sa.includes(x.id)), pickB = B.filter(x => T.sb.includes(x.id));
@@ -391,6 +427,56 @@ function renderAcquire() {
   return h;
 }
 
+function histAsset(a) {
+  if (a.kind === 'p') {
+    const g = pos(a.id);
+    return { v: V(a.id), cat: E.IDP.includes(g) ? 'IDP' : 'OFF', html: `${posTag(g)} ${esc(P(a.id).n)}` };
+  }
+  const drafted = S.hist.pickPlayer[`${a.season}-${a.round}-${a.orig}`];
+  const lbl = `${a.season} R${a.round}${a.orig !== a.to ? ` <span class="dim">(${esc(teamName(a.orig))}'s)</span>` : ''}`;
+  if (drafted) { const g = pos(drafted); return { v: V(drafted), cat: E.IDP.includes(g) ? 'IDP' : 'OFF', html: `<span class="pos">PK</span> ${lbl} → ${posTag(g)} ${esc(P(drafted).n)}` }; }
+  const live = S.picks.find(p => p.id === `pick:${a.season}-${a.round}-${a.orig}`);
+  const v = live ? live.value : (a.season > S.draft.draftSeason + 2 ? S.pm.genericVal(a.season, a.round) : 0);
+  return { v, cat: 'PICK', html: `<span class="pos">PK</span> ${live ? esc(live.label) : lbl}${!live && !v ? ' <span class="dim">(used, not found)</span>' : ''}` };
+}
+function renderHistory() {
+  if (!S.hist) {
+    if (!S.histLoading) {
+      S.histLoading = true;
+      D.loadLeagueTrades(S.league).then(h => { S.hist = h; S.histLoading = false; render(); })
+        .catch(e => { S.hist = { trades: [], pickPlayer: {}, err: e.message }; S.histLoading = false; render(); });
+    }
+    return '<pre class="bootlog">> pulling every trade in league history…</pre>';
+  }
+  if (!S.hist.trades.length) return `<div class="banner">No completed trades found${S.hist.err ? ' (' + esc(S.hist.err) + ')' : ''}.</div>`;
+  const graded = S.hist.trades.map(t => E.gradeTrade(t, histAsset));
+  const recent = graded.filter(g => Date.now() - g.ts < 150 * 86400e3);
+  const cal = E.calibrate(recent);
+  const score = {};
+  for (const r of S.rosters) score[r.roster_id] = { net: 0, n: 0, w: 0, l: 0 };
+  for (const g of graded) if (g.sides.length === 2) {
+    const [a, b] = g.sides; const d = a.adj - b.adj;
+    if (score[a.rid]) { score[a.rid].net += d; score[a.rid].n++; if (g.pct >= 0.05) score[a.rid].w++; }
+    if (score[b.rid]) { score[b.rid].net -= d; score[b.rid].n++; if (g.pct >= 0.05) score[b.rid].l++; }
+  }
+  const f = S.ui.histF || 'ALL';
+  const pctTxt = m => `${m >= 1 ? '+' : ''}${Math.round((m - 1) * 100)}%`;
+  const calLine = cal.n < 3 ? `<div class="banner">Only ${cal.n} recent trades mix IDP or picks with offense. That's not enough yet to calibrate. It sharpens as your league trades.</div>`
+    : `<div class="banner ${cal.n >= 15 ? 'g' : ''}">CALIBRATION · ${cal.n >= 15 ? 'solid read' : cal.n >= 8 ? 'low confidence' : 'early read, treat as a hint'} (${cal.n} trades, last 150 days): your league prices <b>IDP at ${cal.idp.toFixed(2)}×</b> the model (${pctTxt(cal.idp)}) and <b>picks at ${cal.pick.toFixed(2)}×</b> (${pctTxt(cal.pick)}).<br>
+      ${cal.idp < 0.85 ? 'Managers pay less for IDP than the model says, so trade <b>for</b> IDP cheaply and sell offense.' : cal.idp > 1.15 ? 'Managers pay more for IDP than the model says, so sell IDP high.' : 'IDP pricing roughly matches the model.'}
+      ${cal.pick < 0.85 ? ' Picks go cheap here, so buy them.' : cal.pick > 1.15 ? ' Picks are overpriced here, so sell them.' : ' Pick pricing roughly matches.'}</div>`;
+  let h = `<p class="note">Every trade in league history, graded with <b>today's</b> values (past picks resolve to the player actually drafted). This is hindsight: it shows who won so far, not who was smart at the time.</p>${calLine}
+    <h2>TRADE SCOREBOARD <small>net value won across all trades</small></h2><div class="tw"><table><thead><tr><th>TEAM</th><th class="num">TRADES</th><th class="num">WON</th><th class="num">LOST</th><th class="num">NET VALUE</th></tr></thead><tbody>${
+    Object.entries(score).sort((a, b) => b[1].net - a[1].net).map(([rid, x]) => `<tr class="${+rid === S.myRid ? 'me' : ''}"><td class="hi">${esc(teamName(+rid))}</td><td class="num">${x.n}</td><td class="num">${x.w}</td><td class="num">${x.l}</td><td class="num ${x.net >= 0 ? 'up' : 'dn'}">${x.net >= 0 ? '+' : ''}${fmt(x.net)}</td></tr>`).join('')}</tbody></table></div>
+    <h2>ALL TRADES <small>${graded.length} total</small></h2><div class="chips"><button class="chip ${f === 'ALL' ? 'on' : ''}" data-histf="ALL">ALL</button><button class="chip ${f === 'MINE' ? 'on' : ''}" data-histf="MINE">MINE</button></div>`;
+  for (const g of graded.filter(g => f === 'ALL' || g.rids.includes(S.myRid)).slice(0, 80)) {
+    const date = new Date(g.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    h += `<div class="panel"><div class="row"><span class="dim">${date}</span><span class="grow"></span><span class="${g.pct < 0.05 ? 'dim' : 'amb'}">${g.pct < 0.05 ? 'EVEN' : esc(teamName(g.winner)) + ' +' + Math.round(g.pct * 100) + '%'}</span></div><div class="cols" style="margin-top:6px">${
+      g.sides.map(sd => `<div><div class="${sd.rid === g.winner && g.pct >= 0.05 ? 'up' : 'dim'}">${esc(teamName(sd.rid))} got · ${fmt(sd.adj)}</div>${sd.got.map(x => `<div>${x.html} <span class="dim">${fmt(x.v)}</span></div>`).join('')}</div>`).join('')}</div></div>`;
+  }
+  return h;
+}
+
 // ---- DRAFT ----
 function renderDraft() {
   const d = S.draft, ds = d.draftSeason;
@@ -492,9 +578,12 @@ function renderWaivers() {
 
 // ---------------- events ----------------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-acq],[data-loadacq],[data-tsub],[data-loadtrade],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
+  const t = e.target.closest('[data-teamsub],[data-boardf],[data-histf],[data-acq],[data-loadacq],[data-tsub],[data-loadtrade],[data-tab],[data-team],[data-ts],[data-mr],[data-wp],[data-ws],[data-rm],#refresh');
   if (!t) return;
-  if (t.dataset.acq) { const [k, v] = t.dataset.acq.split(':'); S.ui.acq[k] = v; render(); }
+  if (t.dataset.teamsub) { S.ui.teamsSub = t.dataset.teamsub; render(); }
+  else if (t.dataset.boardf) { S.ui.boardF = t.dataset.boardf; render(); }
+  else if (t.dataset.histf) { S.ui.histF = t.dataset.histf; render(); }
+  else if (t.dataset.acq) { const [k, v] = t.dataset.acq.split(':'); S.ui.acq[k] = v; render(); }
   else if (t.dataset.loadacq) {
     const r = S.acqCache.list[+t.dataset.loadacq];
     S.ui.trade = { a: S.myRid, b: r.partner, sa: r.give.map(x => x.id), sb: [r.target.id], qa: '', qb: '' }; S.ui.tradeSub = 'calc'; render(); window.scrollTo(0, 0);

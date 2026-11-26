@@ -60,3 +60,23 @@ W('state.json', { season: '2026', season_type: 'regular', week: 12, display_week
 W('trending.json', pids.filter(p => !rosters.some(r => r.players.includes(p))).slice(0, 30).map((p, i) => ({ player_id: p, count: 5000 - i * 150 })));
 W('userleagues.json', []);
 console.log('players', pids.length, 'rostered', rosters.reduce((a, r) => a + r.players.length, 0));
+
+// ---- trade history fixtures
+{
+  const R = rosters; const pick = (r, f) => r.players.filter(f)[Math.floor(rnd() * r.players.filter(f).length)];
+  const isIdp = p => !['QB', 'RB', 'WR', 'TE', 'K'].includes(players[p].position), isOff = p => !isIdp(p);
+  const tx = [];
+  const mk = (id, ts, a, b, aGets, bGets, picks = []) => tx.push({ transaction_id: id, type: 'trade', status: 'complete', status_updated: ts, created: ts, roster_ids: [a, b],
+    adds: Object.fromEntries([...aGets.map(p => [p, a]), ...bGets.map(p => [p, b])]), draft_picks: picks });
+  const now = Date.now(), d = 86400e3;
+  mk('t1', now - 20 * d, 1, 2, [pick(R[1], isOff)], [pick(R[0], isIdp), pick(R[0], isIdp)]);
+  mk('t2', now - 35 * d, 3, 4, [pick(R[3], isIdp)], [pick(R[2], isOff)]);
+  mk('t3', now - 50 * d, 5, 6, [pick(R[5], isOff)], [], [{ season: '2027', round: 1, roster_id: 5, owner_id: 6, previous_owner_id: 5 }, { season: '2027', round: 2, roster_id: 5, owner_id: 6, previous_owner_id: 5 }]);
+  mk('t4', now - 70 * d, 1, 7, [pick(R[6], isOff), pick(R[6], isIdp)], [pick(R[0], isOff)], [{ season: '2026', round: 1, roster_id: 7, owner_id: 1, previous_owner_id: 7 }]);
+  mk('t5', now - 90 * d, 8, 9, [pick(R[8], isIdp), pick(R[8], isIdp)], [pick(R[7], isOff)]);
+  mk('t6', now - 110 * d, 10, 11, [pick(R[10], isOff)], [pick(R[9], isIdp)], [{ season: '2027', round: 3, roster_id: 10, owner_id: 11, previous_owner_id: 10 }]);
+  W('tx-5.json', tx.slice(0, 3)); W('tx-9.json', tx.slice(3));
+  const rookies = pids.filter(p => players[p].years_exp === 0).slice(0, 24);
+  W('drafts.json', [{ draft_id: 'd26', season: '2026', status: 'complete', slot_to_roster_id: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, 12 - i])) }]);
+  W('draftpicks.json', rookies.map((p, i) => ({ round: Math.floor(i / 12) + 1, draft_slot: (i % 12) + 1, roster_id: 12 - (i % 12), player_id: p, pick_no: i + 1 })));
+}

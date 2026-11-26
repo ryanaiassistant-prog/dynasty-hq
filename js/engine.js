@@ -31,10 +31,22 @@ export function scoreStats(stats, scoring) {
   return Math.round(t * 100) / 100;
 }
 
+/** Season scoring with touchdowns regressed halfway toward what the yardage supports (TDs are the noisiest stat). */
+const YDS_PER_TD = { rush: 130, rec: 155, pass: 155 };
+export function scoreStatsRegressed(stats, scoring) {
+  if (!stats) return 0;
+  const s = { ...stats };
+  if (s.rush_td || s.rush_yd) s.rush_td = 0.5 * (s.rush_td || 0) + 0.5 * Math.max(0, s.rush_yd || 0) / YDS_PER_TD.rush;
+  if (s.rec_td || s.rec_yd) s.rec_td = 0.5 * (s.rec_td || 0) + 0.5 * Math.max(0, s.rec_yd || 0) / YDS_PER_TD.rec;
+  if (s.pass_td || s.pass_yd) s.pass_td = 0.5 * (s.pass_td || 0) + 0.5 * Math.max(0, s.pass_yd || 0) / YDS_PER_TD.pass;
+  return scoreStats(s, scoring);
+}
+
 // season production: {pid: {gp, pts}} for current and previous season → ppg blend
 export function blendPPG(cur, prev) {
   const c = cur && cur.gp > 0 ? cur : null, p = prev && prev.gp > 0 ? prev : null;
-  if (c && p) { const wp = 0.6; return (c.pts + p.pts * wp) / (c.gp + p.gp * wp); }
+  // last season's weight shrinks as this season builds: 0.6 at week 0 → ~0.3 by game 9 → 0.15 floor
+  if (c && p) { const wp = Math.max(0.15, 0.6 * (1 - c.gp / 17)); return (c.pts + p.pts * wp) / (c.gp + p.gp * wp); }
   if (c) return c.pts / c.gp;
   if (p) return (p.pts / p.gp) * 0.9;
   return 0;
@@ -519,4 +531,48 @@ export function offersFor({ me, rosters, players, val, picks, standingsRank, tar
   }
   out.sort((a, b) => b.score - a.score);
   return out.slice(0, limit);
+}
+
+// ---------- trade history grading & calibration ----------
+/**
+ * Grade a historical trade with today's values.
+ * assetValue(asset) → {v, cat:'OFF'|'IDP'|'PICK', label}
+ */
+export function gradeTrade(tr, assetOf) {
+  const sides = {};
+  for (const rid of tr.rids) sides[rid] = { rid, got: [], total: 0 };
+  for (const pid in tr.adds) { const rid = tr.adds[pid]; const a = assetOf({ kind: 'p', id: pid }); (sides[rid] ||= { rid, got: [], total: 0 }).got.push(a); }
+  for (const pk of tr.picks) { const a = assetOf({ kind: 'k', ...pk }); (sides[pk.to] ||= { rid: pk.to, got: [], total: 0 }).got.push(a); }
+  const list = Object.values(sides);
+  for (const s of list) { s.total = s.got.reduce((a, x) => a + x.v, 0); s.adj = tradeSide(s.got.map(x => x.v)).adj; }
+  list.sort((a, b) => b.adj - a.adj);
+  const top = list[0], second = list[1] || { adj: 0 };
+  return { ...tr, sides: list, winner: top?.rid, margin: top ? top.adj - second.adj : 0, pct: top && top.adj ? (top.adj - second.adj) / top.adj : 0 };
+}
+
+/**
+ * Least-squares estimate of how the league prices IDP and picks relative to offense,
+ * from 2-team trades the managers actually accepted (assumes accepted trades are roughly fair).
+ * Returns multipliers {idp, pick, n}. 1.0 = league agrees with the model.
+ */
+export function calibrate(graded) {
+  const rows = [];
+  for (const g of graded) {
+    if (g.sides.length !== 2) continue;
+    const [a, b] = g.sides; const cat = (s, c) => s.got.filter(x => x.cat === c).reduce((t, x) => t + x.v, 0);
+    const dO = cat(a, 'OFF') - cat(b, 'OFF'), dI = cat(a, 'IDP') - cat(b, 'IDP'), dP = cat(a, 'PICK') - cat(b, 'PICK');
+    const scale = Math.max(1, a.total + b.total);
+    if (Math.abs(dI) + Math.abs(dP) < 1) continue;
+    rows.push([dI / scale, dP / scale, -dO / scale]);
+  }
+  const n = rows.length;
+  if (n < 3) return { idp: 1, pick: 1, n };
+  // ridge-regularized 2x2 normal equations, shrinking toward 1.0
+  const lam = 0.05;
+  let a11 = lam, a12 = 0, a22 = lam, b1 = lam, b2 = lam;
+  for (const [x1, x2, y] of rows) { a11 += x1 * x1; a12 += x1 * x2; a22 += x2 * x2; b1 += x1 * y; b2 += x2 * y; }
+  const det = a11 * a22 - a12 * a12;
+  if (Math.abs(det) < 1e-9) return { idp: 1, pick: 1, n };
+  const clamp = v => Math.min(2.5, Math.max(0.3, v));
+  return { idp: clamp((b1 * a22 - b2 * a12) / det), pick: clamp((a11 * b2 - a12 * b1) / det), n };
 }

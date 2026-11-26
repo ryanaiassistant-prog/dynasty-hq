@@ -27,6 +27,8 @@ def sleeper(route):
         elif u.endswith('/traded_picks'): name = 'traded.json'
         elif u.endswith('/drafts'): name = 'drafts.json'
         elif '/matchups/' in u: name = 'matchups.json'
+        elif '/transactions/' in u: name = f'tx-{u.split("/")[-1]}.json'
+        elif u.startswith('draft/') and u.endswith('/picks'): name = 'draftpicks.json'
         elif u.startswith('user/'): name = 'userleagues.json'
         elif re.match(r'stats/nfl/regular/(\d+)/(\d+)$', u):
             s, w = re.match(r'stats/nfl/regular/(\d+)/(\d+)$', u).groups(); name = f'stats-{s}-{w}.json'
@@ -54,7 +56,11 @@ with sync_playwright() as p:
         pg.wait_for_timeout(1500)
         for tab in ['teams', 'trade', 'draft', 'lineup', 'waivers']:
             pg.click(f'nav button[data-tab="{tab}"]'); pg.wait_for_timeout(700)
-            if tab == 'teams': pg.click('tr[data-team]'); pg.wait_for_timeout(300)
+            if tab == 'teams':
+                pg.click('[data-teamsub="board"]'); pg.wait_for_timeout(400); pg.screenshot(path=f'{OUT}/{label}-board.png', full_page=(label == 'desktop'))
+                print('board:', pg.inner_text('#view')[:500])
+                pg.click('[data-teamsub="power"]'); pg.wait_for_timeout(300)
+                pg.click('tr[data-team]'); pg.wait_for_timeout(300)
             if tab == 'trade':
                 pg.evaluate('window.scrollTo(0,0)'); pg.screenshot(path=f'{OUT}/{label}-finder.png', full_page=(label == 'desktop'))
                 print('finder:', pg.inner_text('#view')[:900])
@@ -65,6 +71,8 @@ with sync_playwright() as p:
                 pg.click('[data-acq="kind:pick"]'); pg.wait_for_timeout(600); pg.screenshot(path=f'{OUT}/{label}-acq-pick.png', full_page=(label == 'desktop'))
                 print('acqpick:', pg.inner_text('#view')[:500])
                 pg.click('[data-loadacq="0"]'); pg.wait_for_timeout(300)
+                pg.click('[data-tsub="hist"]'); pg.wait_for_timeout(1500); pg.screenshot(path=f'{OUT}/{label}-hist.png', full_page=(label == 'desktop'))
+                print('hist:', pg.inner_text('#view')[:1200])
                 pg.click('[data-tsub="find"]'); pg.wait_for_timeout(300)
                 pg.click('[data-loadtrade="0"]'); pg.wait_for_timeout(400)
                 pg.screenshot(path=f'{OUT}/{label}-loaded.png')

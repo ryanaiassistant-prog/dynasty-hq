@@ -1,6 +1,6 @@
 // Data layer: fetch live sources, trim, cache in localStorage.
 import { SOURCES } from './config.js';
-import { scoreStats, groupOf, GROUPS } from './engine.js';
+import { scoreStats, scoreStatsRegressed, groupOf, GROUPS } from './engine.js';
 
 const S = SOURCES.sleeper;
 const H = 3600e3;
@@ -103,11 +103,11 @@ export async function loadPlayers(rosteredSet) {
 
 function statsToPts(obj, scoring) {
   const out = {};
-  for (const pid in obj || {}) { const s = obj[pid]; if (!s) continue; const gp = s.gp || 0; const pts = scoreStats(s, scoring); if (gp || pts) out[pid] = { gp, pts }; }
+  for (const pid in obj || {}) { const s = obj[pid]; if (!s) continue; const gp = s.gp || 0; const pts = scoreStatsRegressed(s, scoring); if (gp || pts) out[pid] = { gp, pts }; }
   return out;
 }
 export async function loadSeasonPts(season, scoring, leagueId, current) {
-  return cached(`season:${leagueId}:${season}`, (current ? 6 : 24 * 7) * H, async () =>
+  return cached(`season2:${leagueId}:${season}`, (current ? 6 : 24 * 7) * H, async () =>
     statsToPts(await getJSON(`${S}/stats/nfl/regular/${season}`), scoring));
 }
 export async function loadWeekPts(season, week, scoring, leagueId) {
@@ -180,3 +180,45 @@ export async function loadRookieBoard() {
 }
 
 export { GROUPS, groupOf };
+
+// ---------- league trade history ----------
+/** All completed trades across this league and up to 3 prior seasons, plus a map of past picks → drafted player. */
+export async function loadLeagueTrades(league) {
+  const chain = []; const seen = new Set();
+  let cur = league;
+  for (let i = 0; i < 4 && cur && !seen.has(cur.league_id); i++) {
+    seen.add(cur.league_id); chain.push(cur);
+    if (!cur.previous_league_id || cur.previous_league_id === '0') break;
+    try { cur = await sleeper.league(cur.previous_league_id); } catch { break; }
+  }
+  const trades = [], pickPlayer = {};
+  await Promise.all(chain.map(async (lg, idx) => {
+    const ttl = idx === 0 ? 3 * H : 24 * 7 * H;
+    const t = await cached(`trades:${lg.league_id}`, ttl, async () => {
+      const weeks = await Promise.all(Array.from({ length: 19 }, (_, w) => getJSON(`${S}/league/${lg.league_id}/transactions/${w}`).catch(() => [])));
+      const out = []; const ids = new Set();
+      for (const list of weeks) for (const tx of list || []) {
+        if (tx.type !== 'trade' || tx.status !== 'complete' || ids.has(tx.transaction_id)) continue;
+        ids.add(tx.transaction_id);
+        out.push({ id: tx.transaction_id, season: Number(lg.season), ts: tx.status_updated || tx.created, rids: tx.roster_ids || [], adds: tx.adds || {},
+          picks: (tx.draft_picks || []).map(p => ({ season: Number(p.season), round: p.round, orig: p.roster_id, to: p.owner_id, from: p.previous_owner_id })) });
+      }
+      return out;
+    });
+    trades.push(...t);
+    const pp = await cached(`draftpicks:${lg.league_id}`, ttl, async () => {
+      const out = {};
+      const drafts = await getJSON(`${S}/league/${lg.league_id}/drafts`).catch(() => []);
+      for (const d of drafts || []) {
+        if (d.status !== 'complete') continue;
+        const picks = await getJSON(`${S}/draft/${d.draft_id}/picks`).catch(() => []);
+        const s2r = d.slot_to_roster_id || {};
+        for (const p of picks || []) { const orig = s2r[p.draft_slot] ?? p.roster_id; out[`${d.season}-${p.round}-${orig}`] = p.player_id; }
+      }
+      return out;
+    });
+    Object.assign(pickPlayer, pp);
+  }));
+  trades.sort((a, b) => b.ts - a.ts);
+  return { trades, pickPlayer };
+}
