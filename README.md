@@ -22,7 +22,7 @@ It's a static site with no server or database. Every page load pulls live data a
 League-specific model: points per game under *your* scoring (0 PPR, first-down bonuses, incompletion penalty, 1-pt sacks, tackle-heavy IDP), minus positional replacement level for 12 teams with this lineup, × a 5-year age curve. Offense blends 65% market and 35% model. IDP is model-only on the same scale, × 0.8 for volatility. Knobs live in `js/config.js`.
 
 ## Hosting
-Hosted on Netlify, linked to this repo. Every push to `main` deploys automatically (no build step; publish directory = repo root).
+GitHub Pages at https://ryanaiassistant-prog.github.io/dynasty-hq/. Every push to `main` deploys automatically via `.github/workflows/pages.yml` (Settings → Pages → Source: GitHub Actions).
 
 ## Dev
 `python3 -m http.server` and open http://localhost:8000. Offline test: `node test/make-fixtures.mjs <dp-dir> && python3 test/e2e.py <dp-dir>`.
